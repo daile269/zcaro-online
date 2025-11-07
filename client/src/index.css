@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* slower spin utility used for active avatar */
+.slow-spin {
+  animation: spin 5s linear infinite;
+}
