@@ -152,6 +152,13 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
     (translations[language] as Record<string, unknown>) ||
     (translations.vi as Record<string, unknown>);
   const [localGameState, setLocalGameState] = useState(gameState);
+
+  // Keep local copy of gameState in sync with prop updates coming from parent/socket events.
+  // Without this sync, the component keeps the initial state and won't reflect joins/start
+  // emitted by the server (which caused the Start button to remain disabled).
+  useEffect(() => {
+    setLocalGameState(gameState);
+  }, [gameState]);
   const boardRef = useRef<HTMLDivElement | null>(null);
   const [floatingOverBoard, setFloatingOverBoard] = useState<
     { id: string; sender: string; message: string; avatar?: string | null }[]
