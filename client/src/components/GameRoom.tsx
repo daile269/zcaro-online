@@ -210,9 +210,12 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
     localGameState.status === "playing";
 
   // Timers per player (seconds remaining)
+  // Per-turn time limit (seconds). Changed from 60s to 45s as requested.
+  const TURN_SECONDS = 45;
+
   const [timers, setTimers] = useState<Record<TimerKey, number>>(() => ({
-    p1: 60,
-    p2: 60,
+    p1: TURN_SECONDS,
+    p2: TURN_SECONDS,
   }));
 
   const timerRef = useRef<number | null>(null);
@@ -274,7 +277,7 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
     if (!activeKey) return;
 
     // reset the active player's timer to full when a new turn starts
-    setTimers((t) => ({ ...t, [activeKey]: 60 }));
+    setTimers((t) => ({ ...t, [activeKey]: TURN_SECONDS }));
 
     timerRef.current = globalThis.setInterval(() => {
       setTimers((t) => {
@@ -427,7 +430,7 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
 
   return (
     <div className="min-h-screen from-sky-200 via-cyan-200 to-blue-200 p-4">
-      <div className="max-w-7xl mx-auto">
+      <div className="w-full max-w-[737.59px] mx-auto px-4">
         {/* Spectators row (if there are more than the two main players) */}
         {(() => {
           const p1id = localGameState.players.player1?.socketId;
@@ -471,23 +474,23 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
         })()}
 
         {/* Players info: avatars centered with names below, X VS O in middle */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 items-center">
+        <div className="grid grid-cols-3 md:grid-cols-3 gap-4 mb-4 items-center">
           {/* Left player */}
           <div className="flex flex-col items-center gap-2">
-            <div className="relative w-24 h-24 bg-white/80 backdrop-blur-lg rounded-full flex items-center justify-center border border-blue-200">
+            <div className="relative w-16 h-16 bg-white/80 backdrop-blur-lg rounded-full flex items-center justify-center border border-blue-200">
               {myPlayer?.avatar ? (
                 <img
                   src={myPlayer.avatar}
                   alt={myPlayer.name}
-                  className={`w-24 h-24 rounded-full ${
+                  className={`w-16 h-16 rounded-full ${
                     isMyTurn ? "slow-spin" : ""
-                  } z-10`}
+                  } z-30`}
                 />
               ) : (
                 <div
-                  className={`w-24 h-24 bg-teal-500 rounded-full flex items-center justify-center text-white font-bold text-2xl ${
+                  className={`w-16 h-16 bg-teal-500 rounded-full flex items-center justify-center text-white font-bold text-2xl ${
                     isMyTurn ? "slow-spin" : ""
-                  }`}
+                  } z-30`}
                 >
                   {(localGameState.players.player1?.name || "Bạn")
                     .charAt(0)
@@ -497,14 +500,14 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
               {/* seconds badge over avatar when active */}
               {isMyTurn && (
                 <>
-                  <div className="absolute inset-0 rounded-full bg-black/60 z-20 pointer-events-none" />
-                  <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-30 pointer-events-none">
+                  <div className="absolute inset-0 rounded-full bg-black/60 z-0 pointer-events-none" />
+                  <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-40 pointer-events-none">
                     <div className=" text-white text-3xl font-bold px-2 py-0.5 rounded">
                       {(() => {
                         const p1id = localGameState.players.player1.socketId;
                         const key: TimerKey =
                           myPlayer?.socketId === p1id ? "p1" : "p2";
-                        return timers[key] ?? 60;
+                        return timers[key] ?? TURN_SECONDS;
                       })()}
                     </div>
                   </div>
@@ -516,8 +519,8 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
                   const p1id = localGameState.players.player1.socketId;
                   const key: TimerKey =
                     myPlayer?.socketId === p1id ? "p1" : "p2";
-                  const secondsLeft = timers[key] ?? 60;
-                  const total = 60;
+                  const secondsLeft = timers[key] ?? TURN_SECONDS;
+                  const total = TURN_SECONDS;
                   const progress = Math.max(
                     0,
                     Math.min(1, secondsLeft / total)
@@ -527,7 +530,7 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
                   const offset = c * (1 - progress);
                   return (
                     <svg
-                      className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 pointer-events-none z-0"
+                      className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 pointer-events-none z-20"
                       viewBox="0 0 64 64"
                     >
                       <circle
@@ -550,16 +553,6 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
                         strokeDashoffset={offset}
                         style={{ transition: "stroke-dashoffset 0.6s linear" }}
                       />
-                      <text
-                        x="32"
-                        y="36"
-                        textAnchor="middle"
-                        fontSize="12"
-                        fill="#034"
-                        fontWeight={700}
-                      >
-                        {secondsLeft}
-                      </text>
                     </svg>
                   );
                 })()}
@@ -593,20 +586,20 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
 
           {/* Right player */}
           <div className="flex flex-col items-center gap-2">
-            <div className="relative w-24 h-24 bg-white/80 backdrop-blur-lg rounded-full flex items-center justify-center border border-blue-200">
+            <div className="relative w-16 h-16 bg-white/80 backdrop-blur-lg rounded-full flex items-center justify-center border border-blue-200">
               {opponent?.avatar ? (
                 <img
                   src={opponent.avatar}
                   alt={opponent.name}
-                  className={`w-24 h-24 rounded-full ${
+                  className={`w-16 h-16 rounded-full ${
                     isOpponentTurn ? "slow-spin" : ""
-                  } z-10`}
+                  } z-30`}
                 />
               ) : (
                 <div
-                  className={`w-24 h-24 bg-gray-300 rounded-full flex items-center justify-center text-gray-700 font-bold text-2xl ${
+                  className={`w-16 h-16 bg-gray-300 rounded-full flex items-center justify-center text-gray-700 font-bold text-2xl ${
                     isOpponentTurn ? "slow-spin" : ""
-                  }`}
+                  } z-30`}
                 >
                   {(localGameState.players.player2?.name || "?")
                     .charAt(0)
@@ -615,14 +608,14 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
               )}
               {isOpponentTurn && (
                 <>
-                  <div className="absolute inset-0 rounded-full bg-black/60 z-20 pointer-events-none" />
-                  <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none">
+                  <div className="absolute inset-0 rounded-full bg-black/60 z-0 pointer-events-none" />
+                  <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-40 pointer-events-none">
                     <div className="text-white text-3xl font-bold px-2 py-0.5 rounded">
                       {(() => {
                         const p1id = localGameState.players.player1.socketId;
                         const key: TimerKey =
                           opponent?.socketId === p1id ? "p1" : "p2";
-                        return timers[key] ?? 60;
+                        return timers[key] ?? TURN_SECONDS;
                       })()}
                     </div>
                   </div>
@@ -630,8 +623,8 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
                     const p1id = localGameState.players.player1.socketId;
                     const key: TimerKey =
                       opponent?.socketId === p1id ? "p1" : "p2";
-                    const secondsLeft = timers[key] ?? 60;
-                    const total = 60;
+                    const secondsLeft = timers[key] ?? TURN_SECONDS;
+                    const total = TURN_SECONDS;
                     const progress = Math.max(
                       0,
                       Math.min(1, secondsLeft / total)
@@ -641,7 +634,7 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
                     const offset = c * (1 - progress);
                     return (
                       <svg
-                        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 pointer-events-none z-0"
+                        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 pointer-events-none z-20"
                         viewBox="0 0 64 64"
                       >
                         <circle
@@ -666,16 +659,6 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
                             transition: "stroke-dashoffset 0.6s linear",
                           }}
                         />
-                        <text
-                          x="32"
-                          y="36"
-                          textAnchor="middle"
-                          fontSize="12"
-                          fill="#034"
-                          fontWeight={700}
-                        >
-                          {secondsLeft}
-                        </text>
                       </svg>
                     );
                   })()}
@@ -767,12 +750,6 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
                     >
                       {t.startGame as string}
                     </button>
-                  </div>
-
-                  <div className="flex flex-col md:flex-row items-center justify-center gap-3">
-                    <p className="text-blue-800 text-lg text-center">
-                      {t.sharingTip as string}
-                    </p>
                   </div>
                 </div>
               ) : (

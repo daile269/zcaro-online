@@ -14,7 +14,7 @@ interface GameBoardProps {
   winningCells?: [number, number][];
 }
 
-const BOARD_SIZE = 20;
+const BOARD_SIZE = 17; // enforce a 17x17 board as requested
 
 export default function GameBoard({
   board,
@@ -28,6 +28,9 @@ export default function GameBoard({
   winningCells = [],
 }: GameBoardProps) {
   const [hoveredCell, setHoveredCell] = useState<[number, number] | null>(null);
+  const [selectedCell, setSelectedCell] = useState<[number, number] | null>(
+    null
+  );
   const gridRef = useRef<HTMLDivElement | null>(null);
   const [zoomEnabled, setZoomEnabled] = useState<boolean>(() => {
     try {
@@ -233,6 +236,21 @@ export default function GameBoard({
     (winningCells || []).map(([r, c]) => `${r}-${c}`)
   );
 
+  // Normalize incoming board to a fixed BOARD_SIZE x BOARD_SIZE so rendering
+  // is safe even if server sends different dimensions. Missing cells are
+  // treated as null (empty).
+  const renderedBoard: (string | null)[][] = Array.from(
+    { length: BOARD_SIZE },
+    (_, r) =>
+      Array.from({ length: BOARD_SIZE }, (_, c) => {
+        try {
+          return board?.[r]?.[c] ?? null;
+        } catch {
+          return null;
+        }
+      })
+  );
+
   // Debug
   useEffect(() => {
     if (lockedCells && lockedCells.length > 0) {
@@ -240,33 +258,14 @@ export default function GameBoard({
     }
   }, [lockedCells]);
 
+  // Determine cell value (only actual placed pieces come from renderedBoard).
+  // We no longer show a preview piece on hover; selection is performed via
+  // click (first click selects a cell, second click confirms the move).
   const getCellContent = (row: number, col: number) => {
-    if (board[row][col]) {
-      return board[row][col];
-    }
-    if (
-      hoveredCell?.[0] === row &&
-      hoveredCell?.[1] === col &&
-      isMyTurn &&
-      gameStatus === "playing"
-    ) {
-      return currentTurn;
-    }
-    return null;
+    return renderedBoard[row][col] ?? null;
   };
 
-  const getCellOpacity = (row: number, col: number) => {
-    if (board[row][col]) return "opacity-100";
-    if (
-      hoveredCell?.[0] === row &&
-      hoveredCell?.[1] === col &&
-      isMyTurn &&
-      gameStatus === "playing"
-    ) {
-      return "opacity-40";
-    }
-    return "opacity-0";
-  };
+  // no preview opacity function needed — placed pieces are always fully visible
 
   const isLocked = (row: number, col: number) => {
     return lockedCells.some(([lr, lc]) => lr === row && lc === col);
@@ -305,7 +304,9 @@ export default function GameBoard({
             const cellValue = getCellContent(row, col);
             const isHovered =
               hoveredCell?.[0] === row && hoveredCell?.[1] === col;
-            const isOccupied = board[row][col] !== null;
+            const isSelected =
+              selectedCell?.[0] === row && selectedCell?.[1] === col;
+            const isOccupied = renderedBoard[row][col] !== null;
             const cellLocked = isLocked(row, col);
             // If it's the very first move (moveCount === 0) and X must play first,
             // restrict allowed cells to validFirstMoveCells for player X.
@@ -339,13 +340,26 @@ export default function GameBoard({
                 style={{}}
                 onClick={() => {
                   if (
-                    isMyTurn &&
-                    !isOccupied &&
-                    !cellLocked &&
-                    gameStatus === "playing"
+                    !isMyTurn ||
+                    isOccupied ||
+                    cellLocked ||
+                    gameStatus !== "playing" ||
+                    (isFirstMoveRestriction && !isValidFirstCell)
                   ) {
-                    onCellClick(row, col);
+                    return;
                   }
+
+                  // Two-step: first click selects (marks) the cell; second click
+                  // on the same cell confirms and sends the move to the server.
+                  if (isSelected) {
+                    // confirm
+                    setSelectedCell(null);
+                    onCellClick(row, col);
+                    return;
+                  }
+
+                  // select new cell
+                  setSelectedCell([row, col]);
                 }}
                 onMouseEnter={() => {
                   if (
@@ -380,6 +394,21 @@ export default function GameBoard({
                   />
                 )}
 
+                {/* Selection / hover highlight: show a faint yellow mark when the
+                    cell is selected (first click) or hovered. */}
+                {(isSelected || isHovered) && !cellLocked && !isOccupied && (
+                  <div
+                    className="absolute inset-0 pointer-events-none"
+                    style={{
+                      backgroundColor: "rgba(255, 235, 135, 0.45)",
+                      boxShadow: "inset 0 0 0 2px rgba(255,180,0,0.9)",
+                      borderRadius: 6,
+                      zIndex: 0,
+                      opacity: 1,
+                    }}
+                  />
+                )}
+
                 {/* Winning cell highlight: only render a subtle yellow panel for exact winning cells */}
                 {isWinning && !cellLocked && (
                   <div
@@ -401,17 +430,51 @@ export default function GameBoard({
                   </span>
                 )}
 
-                {/* Game piece */}
+                {/* Game piece - render as SVG for a thicker, "mập mập" look */}
                 {cellValue && (
-                  <span
-                    className={`
-                  text-xl sm:text-2xl md:text-3xl font-bold relative z-10
-                  ${cellValue === "X" ? "text-red-600" : "text-green-600"}
-                  ${getCellOpacity(row, col)}
-                `}
-                  >
-                    {cellValue}
-                  </span>
+                  <div className="relative z-10 flex items-center justify-center">
+                    {cellValue === "X" ? (
+                      <svg
+                        viewBox="0 0 100 100"
+                        className="w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <line
+                          x1="20"
+                          y1="20"
+                          x2="80"
+                          y2="80"
+                          stroke="#DC2626"
+                          strokeWidth="10"
+                          strokeLinecap="round"
+                        />
+                        <line
+                          x1="80"
+                          y1="20"
+                          x2="20"
+                          y2="80"
+                          stroke="#DC2626"
+                          strokeWidth="10"
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                    ) : (
+                      <svg
+                        viewBox="0 0 100 100"
+                        className="w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <circle
+                          cx="50"
+                          cy="50"
+                          r="30"
+                          fill="none"
+                          stroke="#16A34A"
+                          strokeWidth="10"
+                        />
+                      </svg>
+                    )}
+                  </div>
                 )}
               </button>
             );

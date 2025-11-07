@@ -106,7 +106,7 @@ export default function Lobby({
       mustSignInMatch: "Vui lòng đăng nhập bằng Google để ghép trận",
       matchingInProgress: "🔄 Đang ghép trận...",
       matchByElo: "Ghép trận theo ELO",
-      findMatch: "⚔️ Ghép trận",
+      findMatch: "🎮 Ghép trận",
       joinRoom: "🤝 Vào phòng",
       createRoom: "✚ Tạo phòng",
       roomsTab: "Phòng",
@@ -134,7 +134,7 @@ export default function Lobby({
       mustSignInMatch: "Please sign in with Google to find a match",
       matchingInProgress: "🔄 Matching...",
       matchByElo: "Match by ELO",
-      findMatch: "⚔️ Find match",
+      findMatch: "🎮 Find match",
       joinRoom: "🤝 Join Room",
       createRoom: "✚ Create Room",
       roomsTab: "Rooms",
@@ -255,105 +255,110 @@ export default function Lobby({
       {/* Header is rendered globally by App */}
 
       {/* Action Buttons */}
-      <div className="flex justify-center gap-4 mt-6 mb-6">
-        {/* Find match by ELO (uses server-side matchmaking based on user's ELO) */}
-        <button
-          onClick={() => {
-            try {
-              console.debug(
-                `[${new Date().toISOString()}] Lobby: find-match clicked, user=${
-                  user?._id ?? "anonymous"
-                } isWaiting=${isWaiting}`
+      <div className="w-full max-w-[737.59px] mx-auto px-4 py-4">
+        <div className="flex justify-center gap-4 mt-6 mb-6">
+          {/* Find match by ELO (uses server-side matchmaking based on user's ELO) */}
+          <button
+            onClick={() => {
+              try {
+                console.debug(
+                  `[${new Date().toISOString()}] Lobby: find-match clicked, user=${
+                    user?._id ?? "anonymous"
+                  } isWaiting=${isWaiting}`
+                );
+              } catch {
+                /* ignore */
+              }
+              if (!user) return setShowJoinModal(true);
+              onFindMatch(
+                user.name || `Player ${Math.random().toString(36).slice(2, 6)}`
               );
-            } catch {
-              /* ignore */
+            }}
+            disabled={!user || isWaiting}
+            title={
+              !user
+                ? t.mustSignInMatch
+                : isWaiting
+                ? t.matchingInProgress
+                : t.matchByElo
             }
-            if (!user) return setShowJoinModal(true);
-            onFindMatch(
-              user.name || `Player ${Math.random().toString(36).slice(2, 6)}`
-            );
-          }}
-          disabled={!user || isWaiting}
-          title={
-            !user
-              ? t.mustSignInMatch
-              : isWaiting
-              ? t.matchingInProgress
-              : t.matchByElo
-          }
-          className={`py-3 px-6 rounded-lg text-xl font-semibold transition-colors ${
-            user
-              ? "bg-green-600 hover:bg-green-700 text-white"
-              : "bg-green-200 text-white/60 cursor-not-allowed"
-          }`}
-        >
-          {t.findMatch}
-        </button>
+            className={`py-3 px-6 rounded-lg text-xl font-semibold transition-colors ${
+              user
+                ? "bg-green-600 hover:bg-green-700 text-white"
+                : "bg-green-200 text-white/60 cursor-not-allowed"
+            }`}
+          >
+            {t.findMatch}
+          </button>
 
-        {/* Action Buttons */}
-        <button
-          onClick={() => setShowJoinModal(true)}
-          disabled={!user}
-          title={!user ? t.mustSignInMatch : ""}
-          className={`py-3 px-8 rounded-lg text-xl font-semibold transition-colors ${
-            user
-              ? "bg-blue-600 hover:bg-blue-700 text-white"
-              : "bg-blue-200 text-white/60 cursor-not-allowed"
-          }`}
-        >
-          {t.joinRoom}
-        </button>
+          {/* Action Buttons */}
+          <button
+            onClick={() => setShowJoinModal(true)}
+            disabled={!user}
+            title={!user ? t.mustSignInMatch : ""}
+            className={`py-3 px-8 rounded-lg text-xl font-semibold transition-colors ${
+              user
+                ? "bg-blue-600 hover:bg-blue-700 text-white"
+                : "bg-blue-200 text-white/60 cursor-not-allowed"
+            }`}
+          >
+            {t.joinRoom}
+          </button>
 
-        <button
-          onClick={() => setShowCreateModal(true)}
-          disabled={!user}
-          title={!user ? t.mustSignInMatch : ""}
-          className={`py-3 px-8 rounded-lg text-xl font-semibold transition-colors ${
-            user
-              ? "bg-red-600 hover:bg-red-700 text-white"
-              : "bg-red-200 text-white/60 cursor-not-allowed"
-          }`}
-        >
-          {t.createRoom}
-        </button>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            disabled={!user}
+            title={!user ? t.mustSignInMatch : ""}
+            className={`py-3 px-8 rounded-lg text-xl font-semibold transition-colors ${
+              user
+                ? "bg-red-600 hover:bg-red-700 text-white"
+                : "bg-red-200 text-white/60 cursor-not-allowed"
+            }`}
+          >
+            {t.createRoom}
+          </button>
+        </div>
       </div>
 
       {/* Navigation Tabs */}
-      <div className="flex w-full justify-between gap-4 mt-6 mb-6">
-        <button
-          onClick={() => setActiveTab("rooms")}
-          className={`px-8 w-1/3 py-3 text-lg font-medium transition-colors ${
-            activeTab === "rooms"
-              ? "text-gray-900 border-b-2 border-blue-600"
-              : "text-gray-500 hover:text-gray-700"
-          }`}
-        >
-          {t.roomsTab}
-        </button>
-        <button
-          onClick={() => setActiveTab("onlines")}
-          className={`px-6 w-1/3 py-3 text-lg font-medium transition-colors ${
-            activeTab === "onlines"
-              ? "text-gray-900 border-b-2 border-blue-600"
-              : "text-gray-500 hover:text-gray-700"
-          }`}
-        >
-          {t.onlinesTab}
-        </button>
-        <button
-          onClick={() => setActiveTab("chat")}
-          className={`px-6 w-1/3 py-3 text-lg font-medium transition-colors ${
-            activeTab === "chat"
-              ? "text-gray-900 border-b-2 border-blue-600"
-              : "text-gray-500 hover:text-gray-700"
-          }`}
-        >
-          {t.chatTab}
-        </button>
+      <div className="w-full max-w-[737.59px] mx-auto px-4">
+        <div className="flex w-full justify-between gap-4 mt-6 mb-6">
+          <button
+            onClick={() => setActiveTab("rooms")}
+            className={`px-8 w-1/3 py-3 text-lg font-medium transition-colors ${
+              activeTab === "rooms"
+                ? "text-gray-900 border-b-2 border-blue-600"
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            {t.roomsTab}
+          </button>
+          <button
+            onClick={() => setActiveTab("onlines")}
+            className={`px-6 w-1/3 py-3 text-lg font-medium transition-colors ${
+              activeTab === "onlines"
+                ? "text-gray-900 border-b-2 border-blue-600"
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            {t.onlinesTab}
+          </button>
+          <button
+            onClick={() => setActiveTab("chat")}
+            className={`px-6 w-1/3 py-3 text-lg font-medium transition-colors ${
+              activeTab === "chat"
+                ? "text-gray-900 border-b-2 border-blue-600"
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            {t.chatTab}
+          </button>
+        </div>
       </div>
 
       {/* Content Area */}
-      <div className="max-w-4xl mx-auto px-4 py-8">
+      {/* Centered content with fixed width 737.59px as requested */}
+      <div className="w-full max-w-[737.59px] mx-auto px-4 py-8">
         {activeTab === "rooms" && (
           <div>
             {roomsList.length === 0 ? (

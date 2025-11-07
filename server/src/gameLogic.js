@@ -1,5 +1,5 @@
 // Game logic for Caro/Tic-tac-toe
-export const BOARD_SIZE = 20; // Use a 20x20 board
+export const BOARD_SIZE = 17; // Use a 17x17 board (match client GameBoard)
 
 export function createEmptyBoard() {
   return Array(BOARD_SIZE)
@@ -15,52 +15,82 @@ export function generateLockedCells() {
   // - Ensure the three cells are distinct and spaced apart (manhattan distance >= minDistance).
   // - Retry a number of times before falling back.
   const center = Math.floor(BOARD_SIZE / 2);
-  const centerRadius = 4; // how far from center we allow locked cells (tweakable)
+  const centerRadius = 5; // widen central box so spacing=5 is more achievable
   const minRow = Math.max(0, center - centerRadius);
   const maxRow = Math.min(BOARD_SIZE - 1, center + centerRadius);
   const minCol = Math.max(0, center - centerRadius);
   const maxCol = Math.min(BOARD_SIZE - 1, center + centerRadius);
 
   const manhattan = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]);
-  const minDistance = 3; // require a bit more separation between locked cells
+  const minDistance = 5; // require the locked cells to be at least 5 cells apart (Manhattan)
 
-  const candidates = new Set();
-  const out = [];
-  const maxAttempts = 300;
+  // Build list of candidate positions inside the central box
+  const candidatesArr = [];
+  for (let r = minRow; r <= maxRow; r++) {
+    for (let c = minCol; c <= maxCol; c++) {
+      candidatesArr.push([r, c]);
+    }
+  }
+
+  const shuffle = (arr) => {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const tmp = arr[i];
+      arr[i] = arr[j];
+      arr[j] = tmp;
+    }
+  };
+
+  const maxAttempts = 5000;
   let attempts = 0;
 
-  while (out.length < 3 && attempts < maxAttempts) {
+  // Try to pick 3 cells such that each pair has Manhattan distance >= minDistance.
+  while (attempts < maxAttempts) {
     attempts++;
-    const r = Math.floor(Math.random() * (maxRow - minRow + 1)) + minRow;
-    const c = Math.floor(Math.random() * (maxCol - minCol + 1)) + minCol;
-    const key = `${r},${c}`;
-    if (candidates.has(key)) continue;
-
-    // Ensure new cell isn't too close to existing chosen cells
-    const tooClose = out.some((cell) => manhattan(cell, [r, c]) < minDistance);
-    if (tooClose) continue;
-
-    candidates.add(key);
-    out.push([r, c]);
+    shuffle(candidatesArr);
+    const chosen = [];
+    for (const pos of candidatesArr) {
+      if (chosen.length === 0) {
+        chosen.push(pos);
+        continue;
+      }
+      const tooClose = chosen.some((c) => manhattan(c, pos) < minDistance);
+      if (!tooClose) chosen.push(pos);
+      if (chosen.length === 3) break;
+    }
+    if (chosen.length === 3) {
+      // verify the chosen triple forms a reasonably balanced triangle: all
+      // pairwise Manhattan distances should be between minDistance and maxGap
+      const d01 = manhattan(chosen[0], chosen[1]);
+      const d02 = manhattan(chosen[0], chosen[2]);
+      const d12 = manhattan(chosen[1], chosen[2]);
+      const maxGap = 9; // allow some variability but avoid wildly uneven sets
+      if (
+        d01 >= minDistance &&
+        d02 >= minDistance &&
+        d12 >= minDistance &&
+        d01 <= maxGap &&
+        d02 <= maxGap &&
+        d12 <= maxGap
+      ) {
+        return chosen;
+      }
+      // otherwise keep searching
+    }
   }
 
-  // If randomization failed to pick 3 sufficiently separated cells, fall back
-  // to a deterministic triangle near the center to avoid returning fewer than 3.
-  if (out.length < 3) {
-    const center = Math.floor(BOARD_SIZE / 2);
-    const offsets = [
-      [-4, +2], // upper-right of center
-      [-1, -5], // upper-left of center
-      [+4, +1], // lower-right of center
-    ];
-    return offsets
-      .map(([dr, dc]) => [center + dr, center + dc])
-      .filter(
-        ([rr, cc]) => rr >= 0 && rr < BOARD_SIZE && cc >= 0 && cc < BOARD_SIZE
-      );
-  }
+  // Fallback deterministic symmetric placement if random search fails
 
-  return out;
+  const offsets = [
+    [0, -5], // left of center
+    [5, 0], // below center
+    [0, 5], // right of center
+  ];
+  return offsets
+    .map(([dr, dc]) => [center + dr, center + dc])
+    .filter(
+      ([rr, cc]) => rr >= 0 && rr < BOARD_SIZE && cc >= 0 && cc < BOARD_SIZE
+    );
 }
 
 // Get cells around locked cells (valid first move positions)

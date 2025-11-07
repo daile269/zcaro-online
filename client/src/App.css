@@ -1,8 +1,18 @@
 #root {
   max-width: 1280px;
   margin: 0 auto;
-  padding: 2rem;
+  padding: 0; /* remove global padding so inner containers control spacing */
   text-align: center;
+}
+
+/* Use border-box sizing globally to make width/padding calculations intuitive */
+html {
+  box-sizing: border-box;
+}
+*,
+*::before,
+*::after {
+  box-sizing: inherit;
 }
 
 .logo {
