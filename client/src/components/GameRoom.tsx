@@ -156,7 +156,6 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
   const [floatingOverBoard, setFloatingOverBoard] = useState<
     { id: string; sender: string; message: string; avatar?: string | null }[]
   >([]);
-  const [copied, setCopied] = useState(false);
 
   const handleFloatingOverBoard = (fm: {
     id: string;
@@ -169,50 +168,6 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
     setTimeout(() => {
       setFloatingOverBoard((s) => s.filter((x) => x.id !== fm.id));
     }, 5400);
-  };
-
-  useEffect(() => {
-    setLocalGameState(gameState);
-    if (gameState.lockedCells) {
-      console.log("GameRoom - Locked cells:", gameState.lockedCells);
-    }
-    // debug winning cells presence
-    try {
-      console.debug(
-        "GameRoom - incoming winningCells:",
-        (gameState as unknown as Record<string, unknown>)["winningCells"]
-      );
-    } catch {
-      // ignore
-    }
-    // measure board height after gameState update
-    setTimeout(() => {
-      if (boardRef.current) {
-        // setBoardHeight(boardRef.current.clientHeight);
-      }
-    }, 50);
-  }, [gameState]);
-
-  const handleCopyRoomCode = async () => {
-    try {
-      const code = localGameState.roomId;
-      if (!code) return;
-      if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(code);
-      } else {
-        // fallback
-        const ta = document.createElement("textarea");
-        ta.value = code;
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand("copy");
-        document.body.removeChild(ta);
-      }
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // ignore copy errors
-    }
   };
 
   useEffect(() => {
@@ -737,25 +692,7 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
           </div>
         </div>
 
-        {/* Room code (copyable) */}
-        <div className="mb-4 flex items-center justify-center gap-3">
-          <div className="text-xl text-gray-600">{t.roomCode as string}</div>
-          <div className="px-2 py-1 bg-gray-100 rounded text-xl font-mono">
-            {localGameState.roomId}
-          </div>
-          <button
-            onClick={handleCopyRoomCode}
-            className="ml-2 bg-blue-500 hover:bg-blue-600 text-white text-lg font-medium px-3 py-1 rounded"
-            title={t.copyTitle as string}
-          >
-            {t.copyButton as string}
-          </button>
-          {copied && (
-            <div className="text-sm text-green-600 ml-2">
-              {t.copied as string}
-            </div>
-          )}
-        </div>
+        {/* Room code removed: not displayed per user request */}
 
         {/* Game Status */}
         <div className="bg-white/80 backdrop-blur-lg rounded-xl p-4 mb-4 border border-blue-300/30">

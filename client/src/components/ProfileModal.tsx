@@ -61,6 +61,17 @@ export default function ProfileModal(props: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // initialize liteMode from localStorage
+  useEffect(() => {
+    try {
+      const v = gw.window ? localStorage.getItem("zcaro-lite") : null;
+      if (v === "1") setLiteMode(true);
+    } catch {
+      /* ignore */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // persist zoomMode and notify same-tab listeners when changed
   useEffect(() => {
     try {
@@ -74,6 +85,20 @@ export default function ProfileModal(props: Props) {
       console.debug("persist zoomMode failed", err);
     }
   }, [zoomMode, gw.window]);
+
+  // persist liteMode and notify same-tab listeners when changed
+  useEffect(() => {
+    try {
+      if (gw.window !== undefined) {
+        localStorage.setItem("zcaro-lite", liteMode ? "1" : "0");
+        (gw.window as Window).dispatchEvent(
+          new CustomEvent("zcaro-lite-changed", { detail: liteMode })
+        );
+      }
+    } catch (err) {
+      console.debug("persist liteMode failed", err);
+    }
+  }, [liteMode, gw.window]);
 
   const translations: Record<string, Record<string, string>> = {
     en: {

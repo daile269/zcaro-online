@@ -60,6 +60,15 @@ export default function ChatBox({
     }
   });
 
+  // Lite mode - hide messages and input when true
+  const [liteMode, setLiteMode] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("zcaro-lite") === "1";
+    } catch {
+      return false;
+    }
+  });
+
   useEffect(() => {
     const onStorage = (ev: StorageEvent) => {
       if (ev.key === "zcaro-lang")
@@ -73,10 +82,30 @@ export default function ChatBox({
         /* ignore */
       }
     };
+    const onLiteStorage = (ev: StorageEvent) => {
+      if (ev.key === "zcaro-lite") setLiteMode(ev.newValue === "1");
+    };
+    const onLiteCustom = (ev: Event) => {
+      try {
+        const ce = ev as CustomEvent<boolean>;
+        if (typeof ce.detail === "boolean") setLiteMode(ce.detail);
+      } catch {
+        // ignore
+      }
+    };
+
     window.addEventListener("storage", onStorage as unknown as EventListener);
+    window.addEventListener(
+      "storage",
+      onLiteStorage as unknown as EventListener
+    );
     window.addEventListener(
       "zcaro-language-changed",
       onCustom as EventListener
+    );
+    window.addEventListener(
+      "zcaro-lite-changed",
+      onLiteCustom as EventListener
     );
     return () => {
       window.removeEventListener(
@@ -84,8 +113,16 @@ export default function ChatBox({
         onStorage as unknown as EventListener
       );
       window.removeEventListener(
+        "storage",
+        onLiteStorage as unknown as EventListener
+      );
+      window.removeEventListener(
         "zcaro-language-changed",
         onCustom as EventListener
+      );
+      window.removeEventListener(
+        "zcaro-lite-changed",
+        onLiteCustom as EventListener
       );
     };
   }, []);
@@ -127,7 +164,7 @@ export default function ChatBox({
       if (!payload.roomId || payload.roomId === roomId) {
         // If history is hidden for this client (either during game or for in-room
         // mode), do not append messages to the persistent list; still show ephemeral floating messages.
-        if (!hideHistoryDuringGame && !hideHistoryInRoom) {
+        if (!liteMode && !hideHistoryDuringGame && !hideHistoryInRoom) {
           setMessages((m) => [
             ...m,
             {
@@ -149,9 +186,11 @@ export default function ChatBox({
           message: payload.message,
           avatar: payload.avatar ?? null,
         };
-        setFloating((f) => [...f, fm]);
+        // show floating ephemeral messages only when not in lite mode
+        if (!liteMode) setFloating((f) => [...f, fm]);
         // also notify parent (to float over board) if provided
-        if (typeof onFloating === "function") {
+        // but only when not in lite mode
+        if (!liteMode && typeof onFloating === "function") {
           try {
             onFloating(fm);
           } catch {
@@ -171,8 +210,8 @@ export default function ChatBox({
       messages: Array<Record<string, unknown>>;
     }) => {
       if (!payload || !Array.isArray(payload.messages)) return;
-      // If history is hidden for this client (during game or in-room), ignore the payload
-      if (hideHistoryDuringGame || hideHistoryInRoom) return;
+      // If history is hidden for this client (during game or in-room), or lite mode, ignore the payload
+      if (liteMode || hideHistoryDuringGame || hideHistoryInRoom) return;
       try {
         const mapped = payload.messages.map((m) => ({
           sender: (m.sender as string) || "",
@@ -200,7 +239,19 @@ export default function ChatBox({
         /* ignore */
       }
     };
-  }, [roomId, onFloating, hideHistoryDuringGame, hideHistoryInRoom]);
+  }, [roomId, onFloating, hideHistoryDuringGame, hideHistoryInRoom, liteMode]);
+
+  // If liteMode changed from true -> false (user disabled lite), request history again
+  useEffect(() => {
+    if (!liteMode && !hideHistoryDuringGame && !hideHistoryInRoom) {
+      try {
+        socket.emit("request-chat-history", { roomId });
+      } catch {
+        /* ignore */
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liteMode]);
 
   // If history was hidden and now becomes visible (e.g., leaving room or game finished),
   // request the latest chat history from the server so the player can see it.
@@ -257,120 +308,126 @@ export default function ChatBox({
       {/* Chat panel: cap height so chat stays short */}
 
       {/* Messages area: scrollable, takes available space */}
-      <div
-        ref={containerRef}
-        className="flex-1 space-y-2 pb-2"
-        style={messagesStyle}
-        aria-live="polite"
-      >
-        {messages.map((m, idx) => {
-          const isMe = m.sender === myDisplayName;
-          const wrapperStyle: CSSProperties = {
-            display: "flex",
-            justifyContent: isMe ? "flex-end" : "flex-start",
-          };
+      {!liteMode && (
+        <div
+          ref={containerRef}
+          className="flex-1 space-y-2 pb-2"
+          style={messagesStyle}
+          aria-live="polite"
+        >
+          {messages.map((m, idx) => {
+            const isMe = m.sender === myDisplayName;
+            const wrapperStyle: CSSProperties = {
+              display: "flex",
+              justifyContent: isMe ? "flex-end" : "flex-start",
+            };
 
-          return (
-            <div
-              key={`${m.timestamp}-${m.socketId ?? idx}`}
-              style={wrapperStyle}
-            >
+            return (
               <div
-                className={`p-2 rounded flex items-center gap-2 max-w-[80%] ${
-                  isMe ? "bg-blue-50 text-right" : "bg-white"
-                }`}
+                key={`${m.timestamp}-${m.socketId ?? idx}`}
+                style={wrapperStyle}
               >
-                {/* For other users: avatar on left, then content. For me: content then avatar on right */}
-                {!isMe &&
-                  (m.avatar ? (
-                    <img
-                      src={m.avatar}
-                      alt={m.sender}
-                      className="w-8 h-8 rounded-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs text-gray-700 font-semibold">
-                      {(m.sender || "?").charAt(0).toUpperCase()}
-                    </div>
-                  ))}
+                <div
+                  className={`p-2 rounded flex items-center gap-2 max-w-[80%] ${
+                    isMe ? "bg-blue-50 text-right" : "bg-white"
+                  }`}
+                >
+                  {/* For other users: avatar on left, then content. For me: content then avatar on right */}
+                  {!isMe &&
+                    (m.avatar ? (
+                      <img
+                        src={m.avatar}
+                        alt={m.sender}
+                        className="w-8 h-8 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs text-gray-700 font-semibold">
+                        {(m.sender || "?").charAt(0).toUpperCase()}
+                      </div>
+                    ))}
 
-                <div className="flex-1">
-                  <div className="text-xs text-gray-500">{m.sender}</div>
-                  <div className="text-sm text-gray-800 break-words">
-                    {m.message}
+                  <div className="flex-1">
+                    <div className="text-xs text-gray-500">{m.sender}</div>
+                    <div className="text-sm text-gray-800 break-words">
+                      {m.message}
+                    </div>
+                    <div className="text-xs text-gray-400 mt-1">
+                      {new Date(m.timestamp).toLocaleTimeString()}
+                    </div>
                   </div>
-                  <div className="text-xs text-gray-400 mt-1">
-                    {new Date(m.timestamp).toLocaleTimeString()}
-                  </div>
+
+                  {isMe &&
+                    (m.avatar ? (
+                      <img
+                        src={m.avatar}
+                        alt={m.sender}
+                        className="w-8 h-8 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs text-gray-700 font-semibold">
+                        {(m.sender || "?").charAt(0).toUpperCase()}
+                      </div>
+                    ))}
                 </div>
-
-                {isMe &&
-                  (m.avatar ? (
-                    <img
-                      src={m.avatar}
-                      alt={m.sender}
-                      className="w-8 h-8 rounded-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs text-gray-700 font-semibold">
-                      {(m.sender || "?").charAt(0).toUpperCase()}
-                    </div>
-                  ))}
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Floating ephemeral messages overlay */}
-      <div className="floating-container">
-        {floating.map((fm, idx) => {
-          const cssVars: React.CSSProperties = {
-            ["--i" as unknown as string]: idx,
-          };
-          const isMe = fm.sender === myDisplayName;
-          return (
-            <div
-              key={fm.id}
-              className={`float-msg ${isMe ? "me" : ""}`}
-              style={cssVars}
-            >
-              <div className="flex items-center gap-2">
-                {fm.avatar ? (
-                  <img
-                    src={fm.avatar}
-                    alt={fm.sender}
-                    className="w-6 h-6 rounded-full object-cover"
-                  />
-                ) : (
-                  <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs text-gray-700 font-semibold">
-                    {fm.sender?.charAt(0)?.toUpperCase()}
-                  </div>
-                )}
-                <div className="text-sm">{fm.message}</div>
+      {!liteMode && (
+        <div className="floating-container">
+          {floating.map((fm, idx) => {
+            const cssVars: React.CSSProperties = {
+              ["--i" as unknown as string]: idx,
+            };
+            const isMe = fm.sender === myDisplayName;
+            return (
+              <div
+                key={fm.id}
+                className={`float-msg ${isMe ? "me" : ""}`}
+                style={cssVars}
+              >
+                <div className="flex items-center gap-2">
+                  {fm.avatar ? (
+                    <img
+                      src={fm.avatar}
+                      alt={fm.sender}
+                      className="w-6 h-6 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs text-gray-700 font-semibold">
+                      {fm.sender?.charAt(0)?.toUpperCase()}
+                    </div>
+                  )}
+                  <div className="text-sm">{fm.message}</div>
+                </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
-      {/* Input area pinned to bottom */}
-      <div className="mt-2 flex gap-2">
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={onKeyDown}
-          placeholder={t.placeholder as string}
-          className="flex-1 px-3 py-2 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-300"
-        />
-        <button
-          onClick={sendMessage}
-          className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg"
-        >
-          {t.sendButton as string}
-        </button>
-      </div>
+      {/* Input area pinned to bottom (hidden in lite mode) */}
+      {!liteMode && (
+        <div className="mt-2 flex gap-2">
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={onKeyDown}
+            placeholder={t.placeholder as string}
+            className="flex-1 px-3 py-2 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-300"
+          />
+          <button
+            onClick={sendMessage}
+            className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg"
+          >
+            {t.sendButton as string}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

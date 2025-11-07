@@ -9,21 +9,58 @@ export function createEmptyBoard() {
 
 // Generate 3 locked cells forming a triangle in the center of the board
 export function generateLockedCells() {
-  // Place three locked cells around the center but spaced apart
-  // Choose a few offsets so the locked cells form a loose triangle similar to the reference
+  // Randomize three locked cells each call but bias toward the center.
+  // Rules:
+  // - Choose from a central box around the board center (keeps locked cells "ở giữa").
+  // - Ensure the three cells are distinct and spaced apart (manhattan distance >= minDistance).
+  // - Retry a number of times before falling back.
   const center = Math.floor(BOARD_SIZE / 2);
-  const offsets = [
-    [-4, +2], // upper-right of center
-    [-1, -5], // upper-left of center
-    [+4, +1], // lower-right of center
-  ];
+  const centerRadius = 4; // how far from center we allow locked cells (tweakable)
+  const minRow = Math.max(0, center - centerRadius);
+  const maxRow = Math.min(BOARD_SIZE - 1, center + centerRadius);
+  const minCol = Math.max(0, center - centerRadius);
+  const maxCol = Math.min(BOARD_SIZE - 1, center + centerRadius);
 
-  const cells = offsets.map(([dr, dc]) => [center + dr, center + dc]);
+  const manhattan = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]);
+  const minDistance = 3; // require a bit more separation between locked cells
 
-  // Safety: ensure cells are within bounds
-  return cells.filter(
-    ([r, c]) => r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE
-  );
+  const candidates = new Set();
+  const out = [];
+  const maxAttempts = 300;
+  let attempts = 0;
+
+  while (out.length < 3 && attempts < maxAttempts) {
+    attempts++;
+    const r = Math.floor(Math.random() * (maxRow - minRow + 1)) + minRow;
+    const c = Math.floor(Math.random() * (maxCol - minCol + 1)) + minCol;
+    const key = `${r},${c}`;
+    if (candidates.has(key)) continue;
+
+    // Ensure new cell isn't too close to existing chosen cells
+    const tooClose = out.some((cell) => manhattan(cell, [r, c]) < minDistance);
+    if (tooClose) continue;
+
+    candidates.add(key);
+    out.push([r, c]);
+  }
+
+  // If randomization failed to pick 3 sufficiently separated cells, fall back
+  // to a deterministic triangle near the center to avoid returning fewer than 3.
+  if (out.length < 3) {
+    const center = Math.floor(BOARD_SIZE / 2);
+    const offsets = [
+      [-4, +2], // upper-right of center
+      [-1, -5], // upper-left of center
+      [+4, +1], // lower-right of center
+    ];
+    return offsets
+      .map(([dr, dc]) => [center + dr, center + dc])
+      .filter(
+        ([rr, cc]) => rr >= 0 && rr < BOARD_SIZE && cc >= 0 && cc < BOARD_SIZE
+      );
+  }
+
+  return out;
 }
 
 // Get cells around locked cells (valid first move positions)
