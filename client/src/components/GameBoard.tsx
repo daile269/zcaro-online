@@ -337,7 +337,16 @@ export default function GameBoard({
                 }
                 ${isHovered && !isOccupied && !cellLocked ? "bg-amber-200" : ""}
               `}
-                style={{}}
+                style={
+                  window.innerWidth < 640
+                    ? {
+                        width: `calc(90vw / ${BOARD_SIZE})`,
+                        height: `calc(90vw / ${BOARD_SIZE})`,
+                        maxWidth: "44px",
+                        maxHeight: "44px",
+                      }
+                    : {}
+                }
                 onClick={() => {
                   if (
                     !isMyTurn ||
@@ -425,7 +434,20 @@ export default function GameBoard({
 
                 {/* Cell number (faint gray - darker) - only show when cell is empty */}
                 {!cellLocked && !isOccupied && (
-                  <span className="absolute text-gray-300 text-[10px] sm:text-xs opacity-70">
+                  <span
+                    className="absolute text-gray-300 text-[10px] sm:text-xs opacity-70"
+                    style={
+                      window.innerWidth < 640
+                        ? {
+                            color: "#c5c6c7", // tương đương text-gray-400
+                            opacity: 0.5, // làm nhạt chữ
+                            fontWeight: 300, // nhẹ hơn
+                            transform: "scale(0.9)", // co nhẹ lại
+                            transformOrigin: "center",
+                          }
+                        : {}
+                    }
+                  >
                     {cellNumber}
                   </span>
                 )}
@@ -436,41 +458,41 @@ export default function GameBoard({
                     {cellValue === "X" ? (
                       <svg
                         viewBox="0 0 100 100"
-                        className="w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10"
+                        className="w-5 h-5 sm:w-10 sm:h-10 md:w-8 md:h-8"
                         xmlns="http://www.w3.org/2000/svg"
                       >
                         <line
-                          x1="20"
-                          y1="20"
-                          x2="80"
-                          y2="80"
+                          x1="15"
+                          y1="15"
+                          x2="85"
+                          y2="85"
                           stroke="#DC2626"
-                          strokeWidth="10"
+                          strokeWidth="14"
                           strokeLinecap="round"
                         />
                         <line
-                          x1="80"
-                          y1="20"
-                          x2="20"
-                          y2="80"
+                          x1="85"
+                          y1="15"
+                          x2="15"
+                          y2="85"
                           stroke="#DC2626"
-                          strokeWidth="10"
+                          strokeWidth="14"
                           strokeLinecap="round"
                         />
                       </svg>
                     ) : (
                       <svg
                         viewBox="0 0 100 100"
-                        className="w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10"
+                        className="w-6 h-6 sm:w-10 sm:h-10 md:w-10 md:h-10"
                         xmlns="http://www.w3.org/2000/svg"
                       >
                         <circle
                           cx="50"
                           cy="50"
-                          r="30"
+                          r="32"
                           fill="none"
                           stroke="#16A34A"
-                          strokeWidth="10"
+                          strokeWidth="14"
                         />
                       </svg>
                     )}

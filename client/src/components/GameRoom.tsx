@@ -429,7 +429,7 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
   })();
 
   return (
-    <div className="min-h-screen from-sky-200 via-cyan-200 to-blue-200 p-4">
+    <div className="min-h-screen from-sky-200 via-cyan-200 to-blue-200 pt-4">
       <div className="w-full max-w-[737.59px] mx-auto px-4">
         {/* Spectators row (if there are more than the two main players) */}
         {(() => {
@@ -483,13 +483,13 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
                   src={myPlayer.avatar}
                   alt={myPlayer.name}
                   className={`w-16 h-16 rounded-full ${
-                    isMyTurn ? "slow-spin" : ""
+                    isMyTurn ? "slow-spin filter brightness-75" : ""
                   } z-30`}
                 />
               ) : (
                 <div
                   className={`w-16 h-16 bg-teal-500 rounded-full flex items-center justify-center text-white font-bold text-2xl ${
-                    isMyTurn ? "slow-spin" : ""
+                    isMyTurn ? "slow-spin filter brightness-75" : ""
                   } z-30`}
                 >
                   {(localGameState.players.player1?.name || "Bạn")
@@ -500,8 +500,7 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
               {/* seconds badge over avatar when active */}
               {isMyTurn && (
                 <>
-                  <div className="absolute inset-0 rounded-full bg-black/60 z-0 pointer-events-none" />
-                  <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-40 pointer-events-none">
+                  <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 pointer-events-none">
                     <div className=" text-white text-3xl font-bold px-2 py-0.5 rounded">
                       {(() => {
                         const p1id = localGameState.players.player1.socketId;
@@ -530,9 +529,16 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
                   const offset = c * (1 - progress);
                   return (
                     <svg
-                      className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 pointer-events-none z-20"
+                      className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-16 sm:w-20 md:w-24 h-16 sm:h-20 md:h-24 pointer-events-none z-40"
                       viewBox="0 0 64 64"
                     >
+                      {/* subtle dark background when active */}
+                      <circle
+                        cx="32"
+                        cy="32"
+                        r={r + 2}
+                        fill="rgba(0,0,0,0.06)"
+                      />
                       <circle
                         cx="32"
                         cy="32"
@@ -571,16 +577,28 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
             </div>
           </div>
 
-          {/* Middle VS */}
+          {/* Middle VS - responsive sizing so it stays aligned on mobile */}
           <div className="flex flex-col items-center justify-center gap-2">
-            <div className="flex items-center gap-4">
-              <div className="text-5xl font-extrabold text-black/80">X</div>
+            <div className="flex items-center gap-3 sm:gap-4 h-16">
+              <div
+                className="text-4xl sm:text-5xl font-bold leading-none"
+                style={{ color: "#DC2626" }}
+                aria-hidden
+              >
+                X
+              </div>
               <img
                 src="/vs.webp"
                 alt="vs"
-                className="w-40 h-20 object-contain"
+                className="w-36 sm:w-40 h-14 sm:h-20 object-contain"
               />
-              <div className="text-5xl font-extrabold text-black/80">O</div>
+              <div
+                className="text-4xl sm:text-5xl font-bold leading-none"
+                style={{ color: "#16A34A" }}
+                aria-hidden
+              >
+                O
+              </div>
             </div>
           </div>
 
@@ -608,7 +626,7 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
               )}
               {isOpponentTurn && (
                 <>
-                  <div className="absolute inset-0 rounded-full bg-black/60 z-0 pointer-events-none" />
+                  {/* overlay removed to avoid covering avatar on small screens */}
                   <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-40 pointer-events-none">
                     <div className="text-white text-3xl font-bold px-2 py-0.5 rounded">
                       {(() => {
@@ -634,9 +652,16 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
                     const offset = c * (1 - progress);
                     return (
                       <svg
-                        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 pointer-events-none z-20"
+                        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-16 sm:w-20 md:w-24 h-16 sm:h-20 md:h-24 pointer-events-none z-40"
                         viewBox="0 0 64 64"
                       >
+                        {/* subtle dark background when active */}
+                        <circle
+                          cx="32"
+                          cy="32"
+                          r={r + 2}
+                          fill="rgba(0,0,0,0.06)"
+                        />
                         <circle
                           cx="32"
                           cy="32"
@@ -770,7 +795,7 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
         </div>
 
         {/* Game Board + Chat (Chat moved below the board) */}
-        <div className="bg-white/80 backdrop-blur-lg rounded-xl p-6 border border-blue-300/30 flex flex-col gap-4 justify-center overflow-x-auto">
+        <div className="bg-white/80 backdrop-blur-lg rounded-xl p-6 flex flex-col gap-4 justify-center overflow-x-auto">
           <div ref={boardRef} className="w-full flex justify-center">
             <div className="relative w-full flex justify-center">
               <GameBoard

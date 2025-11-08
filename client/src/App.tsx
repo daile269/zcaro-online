@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import "./App.css";
 import socket from "./socket";
 import Lobby from "./components/Lobby";
@@ -39,6 +39,7 @@ function App() {
   const [isWaiting, setIsWaiting] = useState(false);
   const [mySocketId, setMySocketId] = useState<string>("");
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const stickyToastRef = useRef<string | null>(null);
 
   const addToast = (message: string, type: ToastItem["type"] = "info") => {
     console.debug("addToast ->", message, type);
@@ -147,6 +148,21 @@ function App() {
           "socket event game-started",
           (newGameState as unknown as Record<string, unknown>)["winningCells"]
         );
+        // show a persistent toast while the match is active
+        // remove any previous sticky toast
+        if (stickyToastRef.current) {
+          setToasts((s) => s.filter((x) => x.id !== stickyToastRef.current));
+          stickyToastRef.current = null;
+        }
+        const sid =
+          Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+        const t = {
+          id: sid,
+          message: "Trận đấu đã bắt đầu",
+          type: "info",
+        } as ToastItem;
+        setToasts((s) => [t, ...s]);
+        stickyToastRef.current = sid;
       }
     );
 
@@ -206,40 +222,13 @@ function App() {
       ({ gameState: newGameState }: { gameState: GameState }) => {
         console.debug("socket event game-ended received", newGameState);
         setPersistedGameState(newGameState);
-
-        // Always notify that the match has ended (generic toast)
-        addToast("Trận đấu đã kết thúc", "info");
-
-        // Show an appropriate toast message
-        if (newGameState.status === "finished") {
-          if (newGameState.winner === "draw") {
-            addToast("Trận đấu kết thúc: Hòa!", "info");
-          } else if (newGameState.winner) {
-            // Build full winner/loser names and show as a toast
-            const p1 = newGameState.players.player1;
-            const p2 = newGameState.players.player2;
-            const winnerSymbol = newGameState.winner as string;
-            const winnerPlayer =
-              winnerSymbol === p1.symbol ? p1 : p2 ? p2 : null;
-            const loserPlayer = winnerPlayer === p1 ? p2 : p1;
-
-            const winnerName =
-              winnerPlayer?.socketId === socket.id
-                ? "Bạn"
-                : winnerPlayer?.name || winnerPlayer?.socketId || "Người thắng";
-            const loserName =
-              loserPlayer?.socketId === socket.id
-                ? "Bạn"
-                : loserPlayer?.name || loserPlayer?.socketId || "Người thua";
-
-            const message = `Người thắng: ${winnerName} — Người thua: ${loserName}`;
-            const toastType: ToastItem["type"] =
-              winnerPlayer?.socketId === socket.id ? "success" : "error";
-            addToast(message, toastType);
-          } else {
-            addToast("Trận đấu kết thúc", "info");
-          }
+        // remove any persistent "game started" toast
+        if (stickyToastRef.current) {
+          removeToast(stickyToastRef.current);
+          stickyToastRef.current = null;
         }
+        // show a generic end-of-game toast
+        addToast("Trận đấu đã kết thúc", "info");
       }
     );
 

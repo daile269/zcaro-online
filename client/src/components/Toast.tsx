@@ -66,60 +66,101 @@ function ToastEntry({
   onRemove: (id: string) => void;
 }) {
   const duration = DEFAULT_DURATION;
-  const [remaining, setRemaining] = useState(duration);
-  const [paused, setPaused] = useState(false);
   const [closing, setClosing] = useState(false);
-  const startRef = useRef<number | null>(null);
-  const rafRef = useRef<number | null>(null);
+  const [entered, setEntered] = useState(false);
+  const startRef = useRef<number>(Date.now());
+  const remainingRef = useRef<number>(duration);
+  const timeoutRef = useRef<number | null>(null);
+  const progressRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
+    // trigger enter animation
+    setEntered(false);
+    const enterT = window.setTimeout(() => setEntered(true), 20);
+    // start progress animation by transitioning width from 100% to 0%
+    const el = progressRef.current;
     startRef.current = Date.now();
-    const tick = () => {
-      if (paused) {
-        rafRef.current = requestAnimationFrame(tick);
-        return;
-      }
-      const now = Date.now();
-      const elapsed = startRef.current ? now - startRef.current : 0;
-      const rem = Math.max(0, duration - elapsed);
-      setRemaining(rem);
-      if (rem <= 0) {
-        startClose();
-        return;
-      }
-      rafRef.current = requestAnimationFrame(tick);
-    };
-    rafRef.current = requestAnimationFrame(tick);
+    remainingRef.current = duration;
+    // ensure starting width is full
+    if (el) {
+      el.style.width = "100%";
+      // small delay to allow initial render
+      setTimeout(() => {
+        el.style.transition = `width ${duration}ms linear`;
+        el.style.width = "0%";
+      }, 20);
+    }
+    // schedule close
+    timeoutRef.current = window.setTimeout(() => startClose(), duration);
     return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      clearTimeout(enterT);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paused]);
+  }, [item.id]);
 
   function startClose() {
     if (closing) return;
     setClosing(true);
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
     // allow exit animation (300ms) then call onRemove
     setTimeout(() => onRemove(item.id), 300);
   }
 
-  const pct = Math.max(0, Math.min(100, (remaining / duration) * 100));
+  function handleMouseEnter() {
+    // pause timer
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    const now = Date.now();
+    const elapsed = now - startRef.current;
+    const rem = Math.max(0, remainingRef.current - elapsed);
+    remainingRef.current = rem;
+    // pause CSS transition by fixing computed width
+    const el = progressRef.current;
+    if (el) {
+      const computed = getComputedStyle(el).width;
+      el.style.transition = "none";
+      el.style.width = computed;
+    }
+  }
+
+  function handleMouseLeave() {
+    // resume timer
+    startRef.current = Date.now();
+    const rem = remainingRef.current;
+    // restart CSS transition to 0% over remaining ms
+    const el = progressRef.current;
+    if (el) {
+      // force reflow
+      // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+      el.offsetWidth;
+      el.style.transition = `width ${rem}ms linear`;
+      el.style.width = "0%";
+    }
+    timeoutRef.current = window.setTimeout(() => startClose(), rem);
+  }
 
   return (
     <div
       role="status"
       aria-live="polite"
-      onMouseEnter={() => {
-        setPaused(true);
-      }}
-      onMouseLeave={() => {
-        // resume and adjust startRef so remaining continues correctly
-        startRef.current = Date.now() - (duration - remaining);
-        setPaused(false);
-      }}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
       className={`w-full max-w-sm px-4 py-3 rounded-lg shadow-lg text-white overflow-hidden transform transition-all duration-300 ease-out flex items-start gap-3 ${getBgClass(
         item.type
-      )} ${closing ? "opacity-0 scale-95" : "opacity-100 scale-100"}`}
+      )} ${
+        closing
+          ? "opacity-0 scale-95 -translate-y-2"
+          : entered
+          ? "opacity-100 translate-y-0 scale-100"
+          : "opacity-0 -translate-y-2 scale-95"
+      }`}
+      style={{ willChange: "transform, opacity" }}
     >
       <div className="flex-shrink-0 mt-0.5">
         <Icon type={item.type} />
@@ -128,8 +169,9 @@ function ToastEntry({
         <div className="text-lg leading-tight">{item.message}</div>
         <div className="h-1 w-full bg-white/20 rounded-full mt-2 overflow-hidden">
           <div
+            ref={progressRef}
             className="h-1 bg-white/80 rounded-full"
-            style={{ width: `${pct}%`, transition: "width 120ms linear" }}
+            style={{ width: "100%" }}
           />
         </div>
       </div>

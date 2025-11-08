@@ -203,7 +203,16 @@ class GameManager {
     gameState.lockedCells = lockedCells;
     gameState.validFirstMoveCells = getValidFirstMoveCells(lockedCells);
     gameState.moveCount = 0;
-    gameState.currentTurn = "X";
+    // Alternate who starts each new round. If lastStarter is not set (first
+    // round), default to 'X'. Otherwise pick the opposite of lastStarter.
+    const nextStarter = gameState.lastStarter
+      ? gameState.lastStarter === "X"
+        ? "O"
+        : "X"
+      : "X";
+    gameState.currentTurn = nextStarter;
+    // remember who started this round so the next reset can alternate
+    gameState.lastStarter = nextStarter;
     gameState.status = "playing";
     gameState.winner = null;
     gameState.winningCells = [];
