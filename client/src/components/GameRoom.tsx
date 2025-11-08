@@ -204,9 +204,17 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
   const isMyTurn =
     localGameState.currentTurn === mySymbol &&
     localGameState.status === "playing";
-  const isOpponentTurn =
-    !!opponent &&
-    localGameState.currentTurn === opponent.symbol &&
+
+  // Slot-local players to ensure avatar/name/ELO stay together
+  const leftPlayer = localGameState.players.player1 as Player;
+  const rightPlayer = localGameState.players.player2 as Player | null;
+  const leftIsActive =
+    leftPlayer &&
+    localGameState.currentTurn === leftPlayer.symbol &&
+    localGameState.status === "playing";
+  const rightIsActive =
+    rightPlayer &&
+    localGameState.currentTurn === rightPlayer.symbol &&
     localGameState.status === "playing";
 
   // Timers per player (seconds remaining)
@@ -475,49 +483,41 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
 
         {/* Players info: avatars centered with names below, X VS O in middle */}
         <div className="grid grid-cols-3 md:grid-cols-3 gap-4 mb-4 items-center">
-          {/* Left player */}
+          {/* Left player (player1 slot) */}
           <div className="flex flex-col items-center gap-2">
-            <div className="relative w-16 h-16 bg-white/80 backdrop-blur-lg rounded-full flex items-center justify-center border border-blue-200">
-              {myPlayer?.avatar ? (
+            <div className="relative w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 bg-white/80 backdrop-blur-lg rounded-full flex items-center justify-center border border-blue-200">
+              {leftPlayer?.avatar ? (
                 <img
-                  src={myPlayer.avatar}
-                  alt={myPlayer.name}
-                  className={`w-16 h-16 rounded-full ${
-                    isMyTurn ? "slow-spin filter brightness-75" : ""
+                  src={leftPlayer.avatar}
+                  alt={leftPlayer.name}
+                  className={`w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-full ${
+                    leftIsActive ? "slow-spin filter brightness-75" : ""
                   } z-30`}
                 />
               ) : (
                 <div
-                  className={`w-16 h-16 bg-teal-500 rounded-full flex items-center justify-center text-white font-bold text-2xl ${
-                    isMyTurn ? "slow-spin filter brightness-75" : ""
+                  className={`w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 bg-teal-500 rounded-full flex items-center justify-center text-white font-bold text-2xl ${
+                    leftIsActive ? "slow-spin filter brightness-75" : ""
                   } z-30`}
                 >
-                  {(localGameState.players.player1?.name || "Bạn")
-                    .charAt(0)
-                    .toUpperCase()}
+                  {(leftPlayer?.name || "-").charAt(0).toUpperCase()}
                 </div>
               )}
               {/* seconds badge over avatar when active */}
-              {isMyTurn && (
-                <>
-                  <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 pointer-events-none">
-                    <div className=" text-white text-3xl font-bold px-2 py-0.5 rounded">
-                      {(() => {
-                        const p1id = localGameState.players.player1.socketId;
-                        const key: TimerKey =
-                          myPlayer?.socketId === p1id ? "p1" : "p2";
-                        return timers[key] ?? TURN_SECONDS;
-                      })()}
-                    </div>
+              {leftIsActive && (
+                <div className="absolute inset-0 z-50 pointer-events-none flex items-center justify-center">
+                  <div className=" text-white text-3xl sm:text-4xl md:text-4xl font-bold px-2 py-0.5 rounded">
+                    {(() => {
+                      const key: TimerKey = "p1";
+                      return timers[key] ?? TURN_SECONDS;
+                    })()}
                   </div>
-                </>
+                </div>
               )}
               {/* small timer ring - only when active */}
-              {isMyTurn &&
+              {leftIsActive &&
                 (() => {
-                  const p1id = localGameState.players.player1.socketId;
-                  const key: TimerKey =
-                    myPlayer?.socketId === p1id ? "p1" : "p2";
+                  const key: TimerKey = "p1";
                   const secondsLeft = timers[key] ?? TURN_SECONDS;
                   const total = TURN_SECONDS;
                   const progress = Math.max(
@@ -529,8 +529,9 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
                   const offset = c * (1 - progress);
                   return (
                     <svg
-                      className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-16 sm:w-20 md:w-24 h-16 sm:h-20 md:h-24 pointer-events-none z-40"
+                      className="absolute inset-0 w-full h-full pointer-events-none z-40"
                       viewBox="0 0 64 64"
+                      preserveAspectRatio="xMidYMid meet"
                     >
                       {/* subtle dark background when active */}
                       <circle
@@ -565,14 +566,11 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
             </div>
             <div className="text-center">
               <div className="text-lg text-gray-500">
-                {localGameState.players.player1?.name ||
-                  (t.roomOwner as string)}
+                {leftPlayer?.name || (t.roomOwner as string)}
               </div>
               {/* ELO display */}
               <div className="text-sm text-gray-400">
-                {localGameState.players.player1?.elo
-                  ? `${localGameState.players.player1.elo} ELO`
-                  : ""}
+                {leftPlayer?.elo ? `${leftPlayer.elo} ELO` : ""}
               </div>
             </div>
           </div>
@@ -602,106 +600,94 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
             </div>
           </div>
 
-          {/* Right player */}
+          {/* Right player (player2 slot) */}
           <div className="flex flex-col items-center gap-2">
-            <div className="relative w-16 h-16 bg-white/80 backdrop-blur-lg rounded-full flex items-center justify-center border border-blue-200">
-              {opponent?.avatar ? (
+            <div className="relative w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 bg-white/80 backdrop-blur-lg rounded-full flex items-center justify-center border border-blue-200">
+              {rightPlayer?.avatar ? (
                 <img
-                  src={opponent.avatar}
-                  alt={opponent.name}
-                  className={`w-16 h-16 rounded-full ${
-                    isOpponentTurn ? "slow-spin" : ""
+                  src={rightPlayer.avatar}
+                  alt={rightPlayer.name}
+                  className={`w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-full ${
+                    rightIsActive ? "slow-spin" : ""
                   } z-30`}
                 />
               ) : (
                 <div
-                  className={`w-16 h-16 bg-gray-300 rounded-full flex items-center justify-center text-gray-700 font-bold text-2xl ${
-                    isOpponentTurn ? "slow-spin" : ""
+                  className={`w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 bg-gray-300 rounded-full flex items-center justify-center text-gray-700 font-bold text-2xl ${
+                    rightIsActive ? "slow-spin" : ""
                   } z-30`}
                 >
-                  {(localGameState.players.player2?.name || "?")
-                    .charAt(0)
-                    .toUpperCase()}
+                  {(rightPlayer?.name || "?").charAt(0).toUpperCase()}
                 </div>
               )}
-              {isOpponentTurn && (
-                <>
-                  {/* overlay removed to avoid covering avatar on small screens */}
-                  <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-40 pointer-events-none">
-                    <div className="text-white text-3xl font-bold px-2 py-0.5 rounded">
-                      {(() => {
-                        const p1id = localGameState.players.player1.socketId;
-                        const key: TimerKey =
-                          opponent?.socketId === p1id ? "p1" : "p2";
-                        return timers[key] ?? TURN_SECONDS;
-                      })()}
-                    </div>
+              {rightIsActive && (
+                <div className="absolute inset-0 z-40 pointer-events-none flex items-center justify-center">
+                  <div className="text-white text-3xl sm:text-4xl md:text-4xl font-bold px-2 py-0.5 rounded">
+                    {(() => {
+                      const key: TimerKey = "p2";
+                      return timers[key] ?? TURN_SECONDS;
+                    })()}
                   </div>
-                  {(() => {
-                    const p1id = localGameState.players.player1.socketId;
-                    const key: TimerKey =
-                      opponent?.socketId === p1id ? "p1" : "p2";
-                    const secondsLeft = timers[key] ?? TURN_SECONDS;
-                    const total = TURN_SECONDS;
-                    const progress = Math.max(
-                      0,
-                      Math.min(1, secondsLeft / total)
-                    );
-                    const r = 28;
-                    const c = 2 * Math.PI * r;
-                    const offset = c * (1 - progress);
-                    return (
-                      <svg
-                        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-16 sm:w-20 md:w-24 h-16 sm:h-20 md:h-24 pointer-events-none z-40"
-                        viewBox="0 0 64 64"
-                      >
-                        {/* subtle dark background when active */}
-                        <circle
-                          cx="32"
-                          cy="32"
-                          r={r + 2}
-                          fill="rgba(0,0,0,0.06)"
-                        />
-                        <circle
-                          cx="32"
-                          cy="32"
-                          r={r}
-                          strokeWidth="3"
-                          stroke="#f3fbff"
-                          fill="transparent"
-                        />
-                        <circle
-                          cx="32"
-                          cy="32"
-                          r={r}
-                          strokeWidth="3"
-                          stroke="#06b6d4"
-                          strokeLinecap="round"
-                          fill="transparent"
-                          strokeDasharray={c}
-                          strokeDashoffset={offset}
-                          style={{
-                            transition: "stroke-dashoffset 0.6s linear",
-                          }}
-                        />
-                      </svg>
-                    );
-                  })()}
-                </>
+                </div>
               )}
+              {rightIsActive &&
+                (() => {
+                  const key: TimerKey = "p2";
+                  const secondsLeft = timers[key] ?? TURN_SECONDS;
+                  const total = TURN_SECONDS;
+                  const progress = Math.max(
+                    0,
+                    Math.min(1, secondsLeft / total)
+                  );
+                  const r = 28;
+                  const c = 2 * Math.PI * r;
+                  const offset = c * (1 - progress);
+                  return (
+                    <svg
+                      className="absolute inset-0 w-full h-full pointer-events-none z-40"
+                      viewBox="0 0 64 64"
+                      preserveAspectRatio="xMidYMid meet"
+                    >
+                      <circle
+                        cx="32"
+                        cy="32"
+                        r={r + 2}
+                        fill="rgba(0,0,0,0.06)"
+                      />
+                      <circle
+                        cx="32"
+                        cy="32"
+                        r={r}
+                        strokeWidth="3"
+                        stroke="#eef6fb"
+                        fill="transparent"
+                      />
+                      <circle
+                        cx="32"
+                        cy="32"
+                        r={r}
+                        strokeWidth="3"
+                        stroke="#06b6d4"
+                        strokeLinecap="round"
+                        fill="transparent"
+                        strokeDasharray={c}
+                        strokeDashoffset={offset}
+                        style={{ transition: "stroke-dashoffset 0.6s linear" }}
+                      />
+                    </svg>
+                  );
+                })()}
             </div>
             <div className="text-center">
               <div className="text-lg text-gray-500">
-                {localGameState.players.player2?.name ||
+                {rightPlayer?.name ||
                   (localGameState.status === "waiting"
                     ? (t.waitingShort as string)
                     : (t.opponentLabel as string))}
               </div>
               {/* ELO display for opponent (if available) */}
               <div className="text-sm text-gray-400">
-                {localGameState.players.player2?.elo
-                  ? `${localGameState.players.player2?.elo} ELO`
-                  : ""}
+                {rightPlayer?.elo ? `${rightPlayer.elo} ELO` : ""}
               </div>
             </div>
           </div>
