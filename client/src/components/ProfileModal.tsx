@@ -11,7 +11,7 @@ interface Props {
 export default function ProfileModal(props: Props) {
   const { user, onClose, onSignOut } = props;
   const [liteMode, setLiteMode] = useState(false);
-  const [showIndex, setShowIndex] = useState(false);
+  // const [showIndex, setShowIndex] = useState(false);
   const [zoomMode, setZoomMode] = useState(false);
   const [showLangMenu, setShowLangMenu] = useState(false);
   const gw = globalThis as unknown as { window?: Window };
@@ -186,7 +186,7 @@ export default function ProfileModal(props: Props) {
                 </label>
               </div>
 
-              <div className="flex items-center justify-between py-3 border-b">
+              {/* <div className="flex items-center justify-between py-3 border-b">
                 <div className="text-gray-800 font-medium">{t.showIndex}</div>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
@@ -208,7 +208,7 @@ export default function ProfileModal(props: Props) {
                     }`}
                   />
                 </label>
-              </div>
+              </div> */}
 
               <div className="flex items-center justify-between py-3 border-b">
                 <div className="text-gray-800 font-medium">{t.zoomMode}</div>
@@ -236,7 +236,16 @@ export default function ProfileModal(props: Props) {
 
               <div className="pt-4 text-gray-700 relative">
                 <div className="mb-2">
-                  {t.name}: <span className="font-medium">{user.name}</span>
+                  {t.name}:
+                  <span className="font-medium ml-2">
+                    {user.name} -
+                    {typeof (user as AuthUser & { elo?: number }).elo !==
+                      "undefined" && (
+                      <span className="text-gray-500 ml-2">
+                        {(user as AuthUser & { elo?: number }).elo}
+                      </span>
+                    )}
+                  </span>
                 </div>
 
                 <div className="mb-2">

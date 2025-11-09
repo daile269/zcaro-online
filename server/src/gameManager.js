@@ -38,8 +38,19 @@ class GameManager {
       lockedCells,
       validFirstMoveCells: getValidFirstMoveCells(lockedCells),
       moveCount: 0,
+      // track first starter position to enforce Open-5 rule reliably
+      // track first starter symbol & position for the current round so Open-5
+      // can be enforced for whichever player starts (X or O)
+      firstStarterSymbol: null,
+      firstStarterPos: null,
       createdAt: Date.now(),
       winningCells: [],
+      // Whether this room is rated (affects whether Elo/rating changes are applied)
+      // Default: true. If caller passes player1.rated === false, the room will be unrated.
+      rated: player1?.rated === false ? false : true,
+      // Whether this room is private (created by a user for friends with a code)
+      // Default: false. Set true when caller passes player1.private === true
+      private: player1?.private === true ? true : false,
     };
 
     this.rooms.set(roomId, gameState);
@@ -136,8 +147,62 @@ class GameManager {
       }
     }
 
+    // Open-5 rule: the second move by the player who started the round must be
+    // at least 5 cells away (Manhattan) from their first move. We detect the
+    // "second move" by counting how many pieces of the player's symbol are
+    // currently on the board prior to this move; if exactly one exists, the
+    // current move would be their second.
+    // Note: we support the rule for whichever symbol started the round (X or O).
+    {
+      // count existing pieces of this player's symbol on the board
+      let symbolCount = 0;
+      for (let r = 0; r < gameState.board.length; r++) {
+        for (let c = 0; c < gameState.board[r].length; c++) {
+          if (gameState.board[r][c] === player.symbol) symbolCount++;
+        }
+      }
+
+      // Only enforce the restriction for the player who started the round.
+      if (symbolCount === 1 && gameState.firstStarterSymbol === player.symbol) {
+        // This would be the second move for the starter symbol. Determine the first
+        // position: prefer stored firstStarterPos (should match the symbol).
+        let firstPos = null;
+        if (
+          gameState.firstStarterPos &&
+          gameState.firstStarterSymbol === player.symbol
+        ) {
+          firstPos = gameState.firstStarterPos;
+        }
+
+        if (firstPos) {
+          const manhattan =
+            Math.abs(firstPos[0] - row) + Math.abs(firstPos[1] - col);
+          if (manhattan < 5) {
+            // log details to help debugging why a violation may have been bypassed
+            try {
+              console.warn(
+                `[Open-4] Rejecting move in room=${roomId} by socket=${socketId} symbol=${player.symbol} at (${row},${col}) — first=${firstPos} manhattan=${manhattan}`
+              );
+            } catch (e) {
+              /* ignore logging errors */
+            }
+            return {
+              error:
+                "Open-4: Nước đi thứ 2 cần cách nước đi đầu tiên ít nhất 4 ô cờ.",
+            };
+          }
+        }
+      }
+    }
+
     // Make the move
     gameState.board[row][col] = player.symbol;
+    // If this is the very first move of the round, remember the starter
+    // symbol and its position so we can enforce Open-4 when they move again.
+    if (gameState.moveCount === 0) {
+      gameState.firstStarterSymbol = player.symbol;
+      gameState.firstStarterPos = [row, col];
+    }
     gameState.moveCount++;
 
     // Check for winner
@@ -203,6 +268,8 @@ class GameManager {
     gameState.lockedCells = lockedCells;
     gameState.validFirstMoveCells = getValidFirstMoveCells(lockedCells);
     gameState.moveCount = 0;
+    gameState.firstStarterSymbol = null;
+    gameState.firstStarterPos = null;
     // Alternate who starts each new round. If lastStarter is not set (first
     // round), default to 'X'. Otherwise pick the opposite of lastStarter.
     const nextStarter = gameState.lastStarter

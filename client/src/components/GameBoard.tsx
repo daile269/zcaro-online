@@ -12,6 +12,8 @@ interface GameBoardProps {
   validFirstMoveCells?: [number, number][];
   // Optional array of winning cells (row,col) to draw a line over
   winningCells?: [number, number][];
+  // Changing this key tells the board to clear optimistic placements
+  optimisticInvalidateKey?: number;
 }
 
 const BOARD_SIZE = 17; // enforce a 17x17 board as requested
@@ -20,12 +22,14 @@ export default function GameBoard({
   board,
   onCellClick,
   currentTurn,
+  mySymbol,
   isMyTurn,
   gameStatus,
   lockedCells = [],
   moveCount = 0,
   validFirstMoveCells = [],
   winningCells = [],
+  optimisticInvalidateKey,
 }: GameBoardProps) {
   const [hoveredCell, setHoveredCell] = useState<[number, number] | null>(null);
   const [selectedCell, setSelectedCell] = useState<[number, number] | null>(
@@ -262,8 +266,44 @@ export default function GameBoard({
   // We no longer show a preview piece on hover; selection is performed via
   // click (first click selects a cell, second click confirms the move).
   const getCellContent = (row: number, col: number) => {
-    return renderedBoard[row][col] ?? null;
+    const key = `${row}-${col}`;
+    return renderedBoard[row][col] ?? optimisticPlaced[key] ?? null;
   };
+
+  // Optimistic local placements so UI shows immediately after confirming a move
+  const [optimisticPlaced, setOptimisticPlaced] = useState<
+    Record<string, string>
+  >({});
+
+  // When the parent signals an invalid/failed move (move-error), it will
+  // increment `optimisticInvalidateKey`. Clear optimisticPlaced when that
+  // happens so rejected moves don't remain visible.
+  useEffect(() => {
+    if (typeof optimisticInvalidateKey === "number") {
+      setOptimisticPlaced({});
+    }
+  }, [optimisticInvalidateKey]);
+
+  // When server board updates, remove any optimistic entries that are now reflected
+  useEffect(() => {
+    if (!board) return;
+    setOptimisticPlaced((prev) => {
+      const next = { ...prev };
+      for (const k of Object.keys(prev)) {
+        const [rStr, cStr] = k.split("-");
+        const r = Number(rStr);
+        const c = Number(cStr);
+        try {
+          if (board?.[r]?.[c] != null) {
+            delete next[k];
+          }
+        } catch {
+          // ignore
+        }
+      }
+      return next;
+    });
+  }, [board]);
 
   // no preview opacity function needed — placed pieces are always fully visible
 
@@ -294,7 +334,7 @@ export default function GameBoard({
             winning cells below so that only those cells "light up". */}
 
         <div
-          className={`game-board-grid grid gap-0 p-2 shadow-2xl`}
+          className={`game-board-grid grid gap-0 p-2`}
           style={{ gridTemplateColumns: `repeat(${BOARD_SIZE}, 1fr)` }}
         >
           {Array.from({ length: BOARD_SIZE * BOARD_SIZE }).map((_, index) => {
@@ -362,6 +402,16 @@ export default function GameBoard({
                   // on the same cell confirms and sends the move to the server.
                   if (isSelected) {
                     // confirm
+                    // optimistic UI: show the piece immediately
+                    const k = `${row}-${col}`;
+                    try {
+                      setOptimisticPlaced((prev) => ({
+                        ...prev,
+                        [k]: mySymbol,
+                      }));
+                    } catch {
+                      /* ignore */
+                    }
                     setSelectedCell(null);
                     onCellClick(row, col);
                     return;
@@ -467,7 +517,7 @@ export default function GameBoard({
                           x2="85"
                           y2="85"
                           stroke="#DC2626"
-                          strokeWidth="14"
+                          strokeWidth="20"
                           strokeLinecap="round"
                         />
                         <line
@@ -476,7 +526,7 @@ export default function GameBoard({
                           x2="15"
                           y2="85"
                           stroke="#DC2626"
-                          strokeWidth="14"
+                          strokeWidth="20"
                           strokeLinecap="round"
                         />
                       </svg>
@@ -492,7 +542,7 @@ export default function GameBoard({
                           r="32"
                           fill="none"
                           stroke="#16A34A"
-                          strokeWidth="14"
+                          strokeWidth="20"
                         />
                       </svg>
                     )}

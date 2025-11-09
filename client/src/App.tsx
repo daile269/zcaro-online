@@ -321,6 +321,11 @@ function App() {
     socket.emit("join-room", { roomId, playerName: name });
   };
 
+  const handleSpectateRoom = (roomId: string, playerName: string) => {
+    const name = user?.name || playerName;
+    socket.emit("spectate-room", { roomId, playerName: name });
+  };
+
   const handleCancelMatchmaking = () => {
     socket.emit("cancel-matchmaking");
     setIsWaiting(false);
@@ -334,6 +339,22 @@ function App() {
     socket.emit("leave-room", { roomId });
     setPersistedGameState(null);
     setIsWaiting(false);
+    try {
+      const lang = localStorage.getItem("zcaro-lang") === "en" ? "en" : "vi";
+      addToast(lang === "vi" ? "Rời phòng thành công" : "Left room", "success");
+    } catch {
+      /* ignore */
+    }
+  };
+
+  // Header-level leave handler: used when clicking Home to ensure we leave server room if any
+  const handleHeaderLeave = () => {
+    try {
+      const rid = gameState?.roomId || localStorage.getItem("zcaro_last_room");
+      if (rid) handleLeaveRoom(rid);
+    } catch {
+      /* ignore */
+    }
   };
 
   const handleGoHome = () => {
@@ -356,6 +377,7 @@ function App() {
         onSignIn={handleSignIn}
         onSignOut={handleSignOut}
         onHome={handleGoHome}
+        onLeaveRoom={handleHeaderLeave}
       />
 
       {gameState ? (
@@ -370,6 +392,7 @@ function App() {
           onFindMatch={handleFindMatch}
           onCreateRoom={handleCreateRoom}
           onJoinRoom={handleJoinRoom}
+          onSpectateRoom={handleSpectateRoom}
           isWaiting={isWaiting}
           onCancelMatchmaking={handleCancelMatchmaking}
           user={user}

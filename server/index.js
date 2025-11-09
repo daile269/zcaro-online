@@ -75,6 +75,9 @@ function getRoomsSnapshot() {
         roomId,
         status: gs.status,
         createdAt: gs.createdAt || null,
+        // expose whether this room was explicitly created (private/code) so clients
+        // can decide whether to allow immediate join or only spectate by default
+        isPrivate: gs.private === true,
         player1: {
           name: gs.players?.player1?.name || null,
           socketId: gs.players?.player1?.socketId || null,
@@ -230,6 +233,56 @@ io.on("connection", (socket) => {
     }
   });
 
+  // Allow clients to request spectating a room (join as spectator only)
+  socket.on("spectate-room", async ({ roomId, playerName }) => {
+    try {
+      if (!roomId) return socket.emit("room-not-found", { roomId });
+      const gs = gameManager.getRoom(roomId);
+      if (!gs) return socket.emit("room-not-found", { roomId });
+
+      // Persist or update user record for this socket (spectator)
+      const nameFinal = playerName || `Guest ${socket.id.slice(0, 6)}`;
+      try {
+        await User.findOneAndUpdate(
+          { socketId: socket.id },
+          { $set: { name: nameFinal }, $setOnInsert: { elo: 1200 } },
+          { upsert: true, new: true }
+        );
+      } catch (e) {
+        console.error("Failed to upsert user on spectate-room", e);
+      }
+
+      let userDoc = null;
+      try {
+        userDoc = await User.findOne({ socketId: socket.id }).lean();
+      } catch (e) {
+        /* ignore */
+      }
+
+      const updated = gameManager.addSpectator(roomId, {
+        id: socket.id,
+        socketId: socket.id,
+        name: userDoc?.name || nameFinal,
+        avatar: userDoc?.avatar || null,
+      });
+
+      socket.join(roomId);
+      const enriched = await attachEloToGameState(updated);
+      // send the room state to the spectator (and notify room that spectator joined)
+      io.to(roomId).emit("room-joined", { gameState: enriched });
+
+      // broadcast updated lobby snapshot
+      try {
+        emitRoomsList();
+      } catch (e) {
+        /* ignore */
+      }
+    } catch (e) {
+      console.error("Error handling spectate-room", e);
+      socket.emit("spectate-failed", { message: "Server error" });
+    }
+  });
+
   // Associate a connected socket with a persisted user (after Google login)
   socket.on("identify", async ({ userId }) => {
     try {
@@ -339,6 +392,11 @@ io.on("connection", (socket) => {
       socketId: socket.id,
       name: userDoc?.name || playerNameFinal,
       avatar: userDoc?.avatar || null,
+      // Mark rooms explicitly created by a user as unrated by default
+      rated: false,
+      // mark this room as private/explicitly created - clients should treat it as
+      // requiring a code to take a player slot; others should only spectate by default
+      private: true,
     });
     socket.join(roomId);
     const enriched = await attachEloToGameState(newGameState);
@@ -710,35 +768,144 @@ io.on("connection", (socket) => {
         });
       }
 
-      // If game finished, update ELOs
+      // If game finished, update ELOs (only for rated games)
       try {
         if (result.isWinner || result.isDraw) {
           const gs = result.gameState;
-          const p1 = gs.players.player1;
-          const p2 = gs.players.player2;
-          if (p1 && p2) {
-            const p1id = p1.socketId;
-            const p2id = p2.socketId;
-            if (result.isDraw) {
-              await updateEloForMatch(io, gs.roomId, p1id, p2id, null, true);
-            } else if (result.isWinner) {
-              // winner is stored in gameState.winner as symbol ('X' or 'O')
-              const winnerSymbol = gs.winner;
-              const winnerSocket = winnerSymbol === "X" ? p1id : p2id;
-              await updateEloForMatch(
-                io,
-                gs.roomId,
-                p1id,
-                p2id,
-                winnerSocket,
-                false
-              );
+          // Default is rated=true; skip updates only if gs.rated === false
+          if (gs.rated === false) {
+            // Unrated room - do not modify ratings
+            console.log(`Skipping ELO update for unrated room ${gs.roomId}`);
+          } else {
+            const p1 = gs.players.player1;
+            const p2 = gs.players.player2;
+            if (p1 && p2) {
+              const p1id = p1.socketId;
+              const p2id = p2.socketId;
+              if (result.isDraw) {
+                await updateEloForMatch(io, gs.roomId, p1id, p2id, null, true);
+              } else if (result.isWinner) {
+                // winner is stored in gameState.winner as symbol ('X' or 'O')
+                const winnerSymbol = gs.winner;
+                const winnerSocket = winnerSymbol === "X" ? p1id : p2id;
+                await updateEloForMatch(
+                  io,
+                  gs.roomId,
+                  p1id,
+                  p2id,
+                  winnerSocket,
+                  false
+                );
+              }
             }
           }
         }
       } catch (e) {
         console.error("Failed to update ELO after game end", e);
       }
+    }
+  });
+
+  // Offer draw to opponent
+  socket.on("offer-draw", async ({ roomId }) => {
+    try {
+      if (!roomId) return;
+      const gs = gameManager.getRoom(roomId);
+      if (!gs)
+        return socket.emit("draw-offer-failed", { message: "Room not found" });
+
+      // determine opponent socket id
+      const p1 = gs.players.player1;
+      const p2 = gs.players.player2;
+      if (!p1 || !p2)
+        return socket.emit("draw-offer-failed", {
+          message: "Not enough players",
+        });
+
+      let opponentSocketId = null;
+      if (p1.socketId === socket.id) opponentSocketId = p2.socketId;
+      else if (p2.socketId === socket.id) opponentSocketId = p1.socketId;
+      else
+        return socket.emit("draw-offer-failed", {
+          message: "You are not a player in this room",
+        });
+
+      if (!opponentSocketId)
+        return socket.emit("draw-offer-failed", {
+          message: "Opponent not connected",
+        });
+
+      // Notify opponent of draw offer
+      io.to(opponentSocketId).emit("draw-offered", {
+        fromSocket: socket.id,
+        fromName:
+          (await User.findOne({ socketId: socket.id }).lean())?.name || null,
+        roomId,
+      });
+
+      // Acknowledge sender
+      socket.emit("draw-offer-sent", { roomId });
+    } catch (e) {
+      console.error("Error handling offer-draw", e);
+      socket.emit("draw-offer-failed", { message: "Server error" });
+    }
+  });
+
+  // Respond to a draw offer (accept or decline)
+  socket.on("respond-draw", async ({ roomId, accept, fromSocket }) => {
+    try {
+      if (!roomId || typeof accept !== "boolean" || !fromSocket) return;
+      const gs = gameManager.getRoom(roomId);
+      if (!gs) return;
+
+      // ensure both players present
+      const p1 = gs.players.player1;
+      const p2 = gs.players.player2;
+      if (!p1 || !p2) return;
+
+      // Only allow a player in the room to respond
+      if (p1.socketId !== socket.id && p2.socketId !== socket.id) return;
+
+      if (!accept) {
+        // notify original offerer that the draw was declined
+        io.to(fromSocket).emit("draw-declined", {
+          fromSocket: socket.id,
+          roomId,
+        });
+        return;
+      }
+
+      // Accept: finalize the game as draw
+      gs.status = "finished";
+      gs.winner = "draw";
+      gs.winningCells = [];
+
+      const enriched = await attachEloToGameState(gs);
+
+      // notify room that game ended by draw
+      io.to(roomId).emit("game-ended", {
+        gameState: enriched,
+        reason: "draw-offer-accepted",
+      });
+
+      // Update ELOs for draw
+      try {
+        const p1id = p1.socketId;
+        const p2id = p2.socketId;
+        if (p1id && p2id) {
+          if (gs.rated === false) {
+            console.log(
+              `Skipping ELO update for unrated room ${gs.roomId} (draw accepted)`
+            );
+          } else {
+            await updateEloForMatch(io, gs.roomId, p1id, p2id, null, true);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to update ELO after draw accept", e);
+      }
+    } catch (e) {
+      console.error("Error handling respond-draw", e);
     }
   });
 
@@ -764,14 +931,20 @@ io.on("connection", (socket) => {
           const winnerSocket =
             updated.winner === p1.symbol ? p1.socketId : p2.socketId;
           try {
-            await updateEloForMatch(
-              io,
-              updated.roomId,
-              p1.socketId,
-              p2.socketId,
-              winnerSocket,
-              false
-            );
+            if (updated.rated === false) {
+              console.log(
+                `Skipping ELO update for unrated room ${updated.roomId} (timeout)`
+              );
+            } else {
+              await updateEloForMatch(
+                io,
+                updated.roomId,
+                p1.socketId,
+                p2.socketId,
+                winnerSocket,
+                false
+              );
+            }
           } catch (e) {
             console.error("Failed to update ELO after timeout", e);
           }
@@ -978,37 +1151,80 @@ io.on("connection", (socket) => {
   });
 
   // Leave room
-  socket.on("leave-room", ({ roomId }) => {
-    socket.leave(roomId);
-    const gs = gameManager.getRoom(roomId);
-    if (!gs) return;
-    // If leaving socket is one of the players, remove the whole room
-    if (
-      gs.players.player1?.socketId === socket.id ||
-      gs.players.player2?.socketId === socket.id
-    ) {
-      gameManager.removeRoom(roomId);
-      // clear any pending removal timers for this room
-      try {
-        clearPendingRoomTimer(roomId);
-      } catch (e) {
-        /* ignore */
+  socket.on("leave-room", async ({ roomId }) => {
+    try {
+      socket.leave(roomId);
+      const gs = gameManager.getRoom(roomId);
+      if (!gs) return;
+
+      // If owner (player1) leaves, remove the whole room (existing behavior)
+      if (gs.players.player1?.socketId === socket.id) {
+        try {
+          io.to(roomId).emit("room-removed", { roomId, reason: "owner-left" });
+        } catch (e) {
+          /* ignore */
+        }
+
+        try {
+          clearPendingRoomTimer(roomId);
+        } catch (e) {
+          /* ignore */
+        }
+
+        try {
+          gameManager.removeRoom(roomId);
+        } catch (e) {
+          console.error("Failed to remove room on owner leave", e);
+        }
+
+        try {
+          emitRoomsList();
+        } catch (e) {
+          /* ignore */
+        }
+
+        return;
       }
-      socket.to(roomId).emit("opponent-left");
-      try {
-        emitRoomsList();
-      } catch (e) {
-        /* ignore */
+
+      // If the leaving socket is player2 (non-owner), clear that slot and keep the room
+      if (gs.players.player2?.socketId === socket.id) {
+        try {
+          gs.players.player2 = null;
+          // If a game was in progress, move it back to waiting so owner can wait or start a new round
+          gs.status = "waiting";
+          gs.winner = null;
+          gs.winningCells = [];
+
+          const enriched = await attachEloToGameState(gs);
+          io.to(roomId).emit("room-joined", { gameState: enriched });
+        } catch (e) {
+          console.error("Error handling player2 leave", e);
+        }
+
+        try {
+          emitRoomsList();
+        } catch (e) {
+          /* ignore */
+        }
+
+        return;
       }
-    } else {
+
       // Otherwise treat as spectator leaving
-      gameManager.removeSpectator(roomId, socket.id);
-      socket.to(roomId).emit("spectator-left", { socketId: socket.id });
+      try {
+        gameManager.removeSpectator(roomId, socket.id);
+        socket.to(roomId).emit("spectator-left", { socketId: socket.id });
+      } catch (e) {
+        console.error("Error removing spectator", e);
+      }
+
       try {
         emitRoomsList();
       } catch (e) {
         /* ignore */
       }
+    } catch (e) {
+      console.error("Error handling leave-room", e);
     }
   });
 

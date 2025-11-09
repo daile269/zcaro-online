@@ -7,10 +7,11 @@ interface HeaderProps {
   onSignIn?: (u: AuthUser) => void;
   onSignOut?: () => void;
   onHome?: () => void;
+  onLeaveRoom?: () => void;
 }
 
 export default function Header(props: Readonly<HeaderProps>) {
-  const { user, onSignIn, onSignOut, onHome } = props;
+  const { user, onSignIn, onSignOut, onHome, onLeaveRoom } = props;
   const [showProfile, setShowProfile] = useState(false);
   return (
     <div className="flex justify-center">
@@ -19,13 +20,19 @@ export default function Header(props: Readonly<HeaderProps>) {
           className="text-2xl"
           onClick={() => {
             try {
+              // If provided, perform leave-room logic (emit to server) before navigating home
+              try {
+                onLeaveRoom?.();
+              } catch {
+                /* ignore */
+              }
               onHome?.();
             } catch {
               /* ignore */
             }
           }}
         >
-          <img src="./home.png" alt="Home" width={60} height={60} />
+          <img src="./home.png" alt="Home" width={30} height={30} />
         </button>
         <div className="flex items-center gap-3">
           {user ? (
@@ -39,7 +46,7 @@ export default function Header(props: Readonly<HeaderProps>) {
                   <img
                     src={user.avatar}
                     alt={user.name}
-                    className="w-12 h-12 rounded-full"
+                    className="w-9 h-9 rounded-full"
                   />
                 ) : (
                   <div className="w-12 h-12 bg-teal-500 rounded-full flex items-center justify-center text-white font-bold text-lg">
@@ -47,7 +54,6 @@ export default function Header(props: Readonly<HeaderProps>) {
                   </div>
                 )}
               </button>
-              <div className="text-gray-700 font-semibold">{user.name}</div>
             </div>
           ) : (
             <div>
