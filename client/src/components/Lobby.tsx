@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { AuthUser } from "./GoogleLogin";
-import ChatBox from "./ChatBox";
+// ChatBox removed: Top 20 list replaces chat tab
 import socket from "../socket";
 
 type RoomInfo = {
@@ -43,8 +43,7 @@ export default function Lobby({
   isWaiting,
   onCancelMatchmaking,
   user,
-  mySocketId,
-}: LobbyProps) {
+}: Readonly<LobbyProps>) {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const gw = globalThis as unknown as { window?: Window };
   const [language, setLanguage] = useState<string>(() => {
@@ -110,11 +109,12 @@ export default function Lobby({
       matchingInProgress: "🔄 Đang ghép trận...",
       matchByElo: "Ghép trận theo ELO",
       findMatch: "🏆 Xếp hạng",
-      joinRoom: "🤝 Vào phòng",
+      joinRoom: "🎮 Vào",
       createRoom: "✚ Tạo phòng",
       roomsTab: "Phòng",
       onlinesTab: "Online",
       chatTab: "Chat",
+      top20Tab: "Top ELO",
       notFound: "Không tìm thấy",
       roomCodeLabel: "Mã phòng",
       roomCodeTitle: "Mã phòng :",
@@ -122,7 +122,7 @@ export default function Lobby({
       status: "Trạng thái",
       spectators: "Người xem",
       enterBtn: "Vào",
-      viewBtn: "Xem",
+      viewBtn: "👁︎ Xem",
       introTitle:
         "MỘT SỐ LƯU Ý KHI GIAO LƯU CỜ CARO \n Tham gia group giao lưu TẠI ĐÂY",
       communityTitle: "Tham gia cộng đồng:",
@@ -140,11 +140,12 @@ export default function Lobby({
       matchingInProgress: "🔄 Matching...",
       matchByElo: "Match by ELO",
       findMatch: "🏆 Ranking",
-      joinRoom: "🤝 Join Room",
+      joinRoom: "🎮 Join",
       createRoom: "✚ Create Room",
       roomsTab: "Rooms",
       onlinesTab: "Onlines",
       chatTab: "Chat",
+      top20Tab: "Top ELO",
       notFound: "Not found",
       roomCodeLabel: "Room code",
       roomCodeTitle: "Room code :",
@@ -152,7 +153,7 @@ export default function Lobby({
       status: "Status",
       spectators: "Spectators",
       enterBtn: "Join",
-      viewBtn: "View",
+      viewBtn: "👁︎ View",
       introTitle:
         "SOME NOTES FOR CARO MATCHES \n Join the community group HERE",
       communityTitle: "Join the community:",
@@ -167,7 +168,7 @@ export default function Lobby({
     },
   };
   const t = translations[language] || translations.vi;
-  const [activeTab, setActiveTab] = useState<"rooms" | "onlines" | "chat">(
+  const [activeTab, setActiveTab] = useState<"rooms" | "onlines" | "top20">(
     "rooms"
   );
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -176,6 +177,14 @@ export default function Lobby({
   const [roomId, setRoomId] = useState("");
   const [createRoomCode, setCreateRoomCode] = useState("");
   const [onlineUsers, setOnlineUsers] = useState<
+    {
+      socketId: string;
+      name?: string;
+      avatar?: string | null;
+      elo?: number | null;
+    }[]
+  >([]);
+  const [topPlayers, setTopPlayers] = useState<
     {
       socketId: string;
       name?: string;
@@ -205,6 +214,21 @@ export default function Lobby({
     };
 
     socket.on("online-users", handler);
+    const topHandler = ({ players }: { players?: RawUser[] }) => {
+      try {
+        if (!Array.isArray(players)) return;
+        const list = players.map((u) => ({
+          socketId: u.socketId,
+          name: u.name,
+          avatar: u.avatar ?? null,
+          elo: typeof u.elo === "number" ? u.elo : null,
+        }));
+        setTopPlayers(list.slice(0, 20));
+      } catch {
+        /* ignore */
+      }
+    };
+    socket.on("top-players", topHandler);
     const roomsHandler = (payload: { rooms?: unknown }) => {
       try {
         const { rooms } = payload as { rooms?: unknown };
@@ -226,6 +250,7 @@ export default function Lobby({
     return () => {
       socket.off("online-users", handler);
       socket.off("rooms-list", roomsHandler);
+      socket.off("top-players", topHandler);
     };
   }, []);
 
@@ -241,7 +266,21 @@ export default function Lobby({
         /* ignore */
       }
     }
-  }, [activeTab]);
+    if (activeTab === "top20") {
+      try {
+        // Ask server for top players; server may respond on 'top-players'
+        socket.emit("request-top-players");
+      } catch {
+        /* ignore */
+      }
+      // Fallback: compute from known online users immediately
+      setTopPlayers(
+        [...onlineUsers]
+          .sort((a, b) => (b.elo ?? -Infinity) - (a.elo ?? -Infinity))
+          .slice(0, 20)
+      );
+    }
+  }, [activeTab, onlineUsers]);
 
   // Track elapsed waiting time (seconds) while matchmaking
   useEffect(() => {
@@ -298,20 +337,6 @@ export default function Lobby({
             {t.findMatch}
           </button>
 
-          {/* Action Buttons */}
-          <button
-            onClick={() => setShowJoinModal(true)}
-            disabled={!user}
-            title={!user ? t.mustSignInMatch : ""}
-            className={`py-3 px-8 rounded-lg text-sm font-semibold transition-colors ${
-              user
-                ? "bg-blue-600 hover:bg-blue-700 text-white"
-                : "bg-blue-200 text-white/60 cursor-not-allowed"
-            }`}
-          >
-            {t.joinRoom}
-          </button>
-
           <button
             onClick={() => setShowCreateModal(true)}
             disabled={!user}
@@ -351,14 +376,14 @@ export default function Lobby({
             {t.onlinesTab}
           </button>
           <button
-            onClick={() => setActiveTab("chat")}
+            onClick={() => setActiveTab("top20")}
             className={`px-6 w-1/3 py-3 text-sm font-medium transition-colors ${
-              activeTab === "chat"
+              activeTab === "top20"
                 ? "text-gray-900 border-b-2 border-blue-600"
                 : "text-gray-500 hover:text-gray-700"
             }`}
           >
-            {t.chatTab}
+            {t.top20Tab}
           </button>
         </div>
       </div>
@@ -392,18 +417,22 @@ export default function Lobby({
                           {r.player1?.avatar ? (
                             <img
                               src={r.player1.avatar}
-                              alt={r.player1?.name || t.host}
+                              alt={
+                                r.player1?.elo != null
+                                  ? String(r.player1.elo)
+                                  : t.host
+                              }
                               className="w-10 h-10 rounded-full object-cover"
                             />
                           ) : (
                             <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-sm text-gray-700 font-semibold">
-                              {r.player1?.name
-                                ? r.player1.name.charAt(0).toUpperCase()
+                              {r.player1?.elo != null
+                                ? String(r.player1.elo)
                                 : "C"}
                             </div>
                           )}
                           <div className="text-sm text-gray-500 font-medium">
-                            {r.player1?.name || t.host}
+                            {r.player1?.elo != null ? r.player1.elo : t.host}
                           </div>
                         </div>
 
@@ -413,18 +442,22 @@ export default function Lobby({
                           {r.player2?.avatar ? (
                             <img
                               src={r.player2.avatar}
-                              alt={r.player2?.name || "–"}
+                              alt={
+                                r.player2?.elo != null
+                                  ? String(r.player2.elo)
+                                  : "–"
+                              }
                               className="w-10 h-10 rounded-full object-cover"
                             />
                           ) : (
                             <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-sm text-gray-700 font-semibold">
-                              {r.player2?.name
-                                ? r.player2.name.charAt(0).toUpperCase()
+                              {r.player2?.elo != null
+                                ? String(r.player2.elo)
                                 : "–"}
                             </div>
                           )}
                           <div className="text-sm text-gray-500 font-medium">
-                            {r.player2?.name || "–"}
+                            {r.player2?.elo != null ? r.player2.elo : "–"}
                           </div>
                         </div>
                       </div>
@@ -432,7 +465,8 @@ export default function Lobby({
                         {t.status}: {r.status} • {t.spectators}: {r.spectators}
                       </div>
                     </div>
-                    <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col sm:flex-row items-center gap-2 sm:gap-3 justify-end">
+                      {/* Nút View */}
                       <button
                         onClick={() => {
                           // If room is private, default to spectate mode for outsiders
@@ -454,9 +488,23 @@ export default function Lobby({
                             setShowJoinModal(true);
                           }
                         }}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg"
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg w-full sm:w-auto"
                       >
                         {r.isPrivate ? t.viewBtn : t.enterBtn}
+                      </button>
+
+                      {/* Nút Join Room */}
+                      <button
+                        onClick={() => setShowJoinModal(true)}
+                        disabled={!user}
+                        title={!user ? t.mustSignInMatch : ""}
+                        className={`px-4 py-2 rounded-lg transition-colors w-full sm:w-auto ${
+                          user
+                            ? "bg-blue-600 hover:bg-blue-700 text-white"
+                            : "bg-blue-200 text-white/60 cursor-not-allowed"
+                        }`}
+                      >
+                        {t.joinRoom}
                       </button>
                     </div>
                   </div>
@@ -605,15 +653,40 @@ export default function Lobby({
           </div>
         )}
 
-        {activeTab === "chat" && (
+        {activeTab === "top20" && (
           <div>
-            {/* Render the shared/global chat here */}
-            <ChatBox
-              roomId={"global"}
-              myName={user?.name}
-              mySocketId={mySocketId}
-              hideHistoryInRoom={false}
-            />
+            {topPlayers.length === 0 ? (
+              <p className="text-gray-500 text-sm">{t.notFound}</p>
+            ) : (
+              <div className="space-y-2">
+                {topPlayers.map((u, idx) => (
+                  <div
+                    key={u.socketId}
+                    className="flex items-center gap-3 p-3 bg-white rounded shadow-sm"
+                  >
+                    <div className="w-8 text-sm font-semibold text-gray-600">
+                      #{idx + 1}
+                    </div>
+                    {u.avatar ? (
+                      <img
+                        src={u.avatar}
+                        alt={u.name}
+                        className="w-10 h-10 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-sm text-gray-700 font-semibold">
+                        {u.name ? u.name.charAt(0).toUpperCase() : "?"}
+                      </div>
+                    )}
+                    <div className="flex-1">
+                      <div className="text-sm font-bold text-gray-800">
+                        {u.name || t.guest} - {u.elo ?? "—"}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

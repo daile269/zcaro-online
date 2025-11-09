@@ -177,6 +177,29 @@ if (process.env.MONGO_URI) {
 
 app.get("/", (req, res) => res.send("ZCaro backend running..."));
 
+// Return user profile by id (used by client to refresh profile when opening modal)
+app.get("/api/user/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id) return res.status(400).json({ error: "Missing id" });
+    const u = await User.findById(id).lean();
+    if (!u) return res.status(404).json({ error: "User not found" });
+    // normalize fields the client expects
+    const out = {
+      _id: u._id,
+      name: u.name,
+      email: u.email,
+      avatar: u.avatar || null,
+      elo: u.elo ?? u.rating ?? null,
+      rating: u.rating ?? u.elo ?? null,
+    };
+    return res.json({ user: out });
+  } catch (e) {
+    console.error("/api/user/:id error", e);
+    return res.status(500).json({ error: "Server error" });
+  }
+});
+
 // Google ID token verification endpoint
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -230,6 +253,44 @@ io.on("connection", (socket) => {
       socket.emit("rooms-list", { rooms: snapshot });
     } catch (e) {
       console.error("Failed to handle request-rooms", e);
+    }
+  });
+
+  // Allow clients to request the global Top-20 players (server-authoritative)
+  socket.on("request-top-players", async () => {
+    try {
+      // If Mongo is configured, use the persistent User collection to determine
+      // the global top players. Otherwise fall back to the in-memory onlineUsers map.
+      if (process.env.MONGO_URI) {
+        const users = await User.find({})
+          .sort({ elo: -1, rating: -1 })
+          .limit(20)
+          .lean();
+
+        const players = users.map((u) => ({
+          socketId: u.socketId || null,
+          name: u.name || `Player ${String(u._id).slice(0, 6)}`,
+          avatar: u.avatar || null,
+          elo: u.elo ?? u.rating ?? 0,
+        }));
+
+        socket.emit("top-players", { players });
+      } else {
+        // No DB available — return top from the currently online users as best-effort
+        const arr = Array.from(onlineUsers.values())
+          .sort((a, b) => (b.elo || 0) - (a.elo || 0))
+          .slice(0, 20)
+          .map((u) => ({
+            socketId: u.socketId,
+            name: u.name,
+            avatar: u.avatar || null,
+            elo: u.elo ?? 0,
+          }));
+        socket.emit("top-players", { players: arr });
+      }
+    } catch (e) {
+      console.error("Failed to handle request-top-players", e);
+      socket.emit("top-players", { players: [] });
     }
   });
 

@@ -177,7 +177,7 @@ class GameManager {
         if (firstPos) {
           const manhattan =
             Math.abs(firstPos[0] - row) + Math.abs(firstPos[1] - col);
-          if (manhattan < 5) {
+          if (manhattan < 4) {
             // log details to help debugging why a violation may have been bypassed
             try {
               console.warn(

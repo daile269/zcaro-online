@@ -180,6 +180,10 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   // increment this to tell GameBoard to clear optimistic placements
   const [optimisticInvalidateKey, setOptimisticInvalidateKey] = useState(0);
+  // selected spectator for profile modal
+  const [selectedSpectator, setSelectedSpectator] = useState<Player | null>(
+    null
+  );
   const addToast = (message: string, type: ToastItem["type"] = "info") => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     setToasts((s) => [...s, { id, message, type }]);
@@ -264,7 +268,7 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
 
     socket.on("room-removed", onRoomRemoved);
 
-  // Listen for server-side move validation errors (e.g., Open-5 rule).
+    // Listen for server-side move validation errors (e.g., Open-4 rule).
     const onMoveError = (payload: { error?: string }) => {
       try {
         const msg =
@@ -664,12 +668,9 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
                 })()}
             </div>
             <div className="text-center">
-              <div className="text-lg text-gray-500">
-                {leftPlayer?.name || (t.roomOwner as string)}
-              </div>
               {/* ELO display */}
-              <div className="text-sm text-gray-400">
-                {leftPlayer?.elo ? `${leftPlayer.elo} ELO` : ""}
+              <div className="text-lg font-bold text-gray-800">
+                {leftPlayer?.elo ? `${leftPlayer.elo}` : ""}
               </div>
             </div>
           </div>
@@ -684,11 +685,12 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
               >
                 X
               </div>
-              <img
+              {/* <img
                 src="/vs.png"
                 alt="vs"
                 className="w-32 sm:w-40 h-14 sm:h-32 object-contain"
-              />
+              /> */}
+              —
               <div
                 className="text-4xl sm:text-5xl font-bold leading-none"
                 style={{ color: "#16A34A" }}
@@ -778,260 +780,21 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
                 })()}
             </div>
             <div className="text-center">
-              <div className="text-lg text-gray-500">
-                {rightPlayer?.name ||
-                  (localGameState.status === "waiting"
-                    ? (t.waitingShort as string)
-                    : (t.opponentLabel as string))}
-              </div>
               {/* ELO display for opponent (if available) */}
-              <div className="text-sm text-gray-400">
-                {rightPlayer?.elo ? `${rightPlayer.elo} ELO` : ""}
+              <div className="text-lg font-bold text-gray-800">
+                {rightPlayer
+                  ? rightPlayer.elo
+                    ? `${rightPlayer.elo}`
+                    : ""
+                  : language === "vi"
+                  ? "Đang chờ..."
+                  : "Waiting ..."}
               </div>
             </div>
           </div>
         </div>
 
         {/* Room code removed: not displayed per user request */}
-
-        {/* Game Status */}
-        <div className="bg-white/80 backdrop-blur-lg rounded-xl mt-4 mb-4 border-blue-300/30">
-          {/* Game Over Message */}
-          {localGameState.status === "finished" && (
-            <div className="mt-4 backdrop-blur-lg rounded-xl p-6 border border-blue-300/30 text-center">
-              <p className="text-blue-700 text-sm font-bold mb-4">
-                {getStatusMessage()}
-              </p>
-              <div className="flex items-center justify-center text-sm gap-4">
-                {myPlayer &&
-                  localGameState.players.player1.socketId ===
-                    myPlayer.socketId && (
-                    <button
-                      onClick={() => {
-                        // owner can restart the game
-                        socket.emit("start-game", {
-                          roomId: localGameState.roomId,
-                        });
-                      }}
-                      className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-5 rounded-lg transition-all"
-                      title={t.startNew as string}
-                    >
-                      {t.startNew as string}
-                    </button>
-                  )}
-
-                <button
-                  onClick={() => setShowLeaveConfirm(true)}
-                  className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-5 rounded-lg transition-all"
-                >
-                  {t.leaveRoom as string}
-                </button>
-              </div>
-            </div>
-          )}
-          {localGameState.status === "waiting" && (
-            <div className="mt-4 bg-yellow-100 border border-yellow-300 rounded-lg p-4">
-              {/* If current user is room owner, show start button + share info */}
-              {myPlayer &&
-              localGameState.players.player1.socketId === myPlayer.socketId ? (
-                <div>
-                  <div className="flex justify-center">
-                    <button
-                      onClick={() => {
-                        if (!localGameState.players.player2) {
-                          alert(t.cannotStart as string);
-                          return;
-                        }
-                        socket.emit("start-game", {
-                          roomId: localGameState.roomId,
-                        });
-                      }}
-                      className={`bg-blue-500 hover:bg-blue-600 text-white text-sm font-bold py-2 px-6 rounded-lg transition-all ${
-                        !localGameState.players.player2
-                          ? "opacity-50 cursor-not-allowed"
-                          : ""
-                      }`}
-                      disabled={!localGameState.players.player2}
-                      title={
-                        localGameState.players.player2
-                          ? (t.startButtonTitle as string)
-                          : (t.noOpponent as string)
-                      }
-                    >
-                      {t.startGame as string}
-                    </button>
-                  </div>
-                  <div className="flex justify-center mt-2">
-                    <button
-                      onClick={() => setShowLeaveConfirm(true)}
-                      className="bg-red-500 hover:bg-red-600 text-white text-sm font-bold py-2 px-6 rounded-lg"
-                    >
-                      {t.leaveRoom as string}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                /* Non-owner: show waiting message */
-                <div className="flex flex-col items-center gap-3">
-                  <p className="text-blue-800 text-sm font-semibold text-center">
-                    {t.waitingOwnerStart as string}
-                  </p>
-                  <p className="text-sm text-gray-600 text-center">
-                    {t.ownerLabel as string}{" "}
-                    {localGameState.players.player1?.name ||
-                      (t.roomOwner as string)}
-                  </p>
-                  <div className="mt-2">
-                    <button
-                      onClick={() => setShowLeaveConfirm(true)}
-                      className="bg-red-500 hover:bg-red-600 text-white text-sm font-bold py-2 px-4 rounded-lg"
-                    >
-                      {t.leaveRoom as string}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Playing controls: offer draw button */}
-        {localGameState.status === "playing" && myPlayer && opponent && (
-          <div className="mb-1 flex justify-center gap-3">
-            <button
-              onClick={() => {
-                try {
-                  socket.emit("offer-draw", { roomId: localGameState.roomId });
-                  setDrawOfferSent(true);
-                } catch {
-                  /* ignore */
-                }
-              }}
-              className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-lg"
-            >
-              {language === "vi" ? "Xin hòa" : "Offer draw"}
-            </button>
-            {drawOfferSent && (
-              <div className="text-sm text-gray-500 flex items-center">
-                {language === "vi"
-                  ? "Đã gửi lời xin hòa, chờ phản hồi..."
-                  : "Draw offer sent, waiting..."}
-              </div>
-            )}
-            <button
-              onClick={() => setShowLeaveConfirm(true)}
-              className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg"
-            >
-              {t.leaveRoom as string}
-            </button>
-          </div>
-        )}
-
-        {/* Incoming draw offer prompt */}
-        {incomingDrawOffer && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-            <div className="bg-white rounded-lg p-4 max-w-sm w-full shadow-xl border border-blue-100">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden">
-                  {/* show initial if no avatar available */}
-                  <div className="text-gray-700 font-semibold">
-                    {(incomingDrawOffer.fromName || "?").charAt(0)}
-                  </div>
-                </div>
-                <div className="flex-1">
-                  <div className="text-lg font-semibold text-gray-800">
-                    {incomingDrawOffer.fromName ||
-                      (language === "vi" ? "Đối thủ" : "Opponent")}
-                  </div>
-                  <div className="text-lg text-gray-500">
-                    {language === "vi"
-                      ? "Đã gửi lời xin hòa"
-                      : "offered a draw"}
-                  </div>
-                </div>
-                <button
-                  onClick={() => setIncomingDrawOffer(null)}
-                  className="text-gray-400 hover:text-gray-600"
-                  aria-label={language === "vi" ? "Đóng" : "Close"}
-                >
-                  ✕
-                </button>
-              </div>
-              <div className="mt-4 flex gap-3 justify-center">
-                <button
-                  onClick={() => {
-                    socket.emit("respond-draw", {
-                      roomId: localGameState.roomId,
-                      accept: false,
-                      fromSocket: incomingDrawOffer.fromSocket,
-                    });
-                    setIncomingDrawOffer(null);
-                    addToast(
-                      language === "vi"
-                        ? "Bạn đã từ chối lời xin hòa"
-                        : "You declined the draw",
-                      "info"
-                    );
-                  }}
-                  className="bg-white border border-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 px-4 rounded"
-                >
-                  {language === "vi" ? "Từ chối" : "Decline"}
-                </button>
-                <button
-                  onClick={() => {
-                    socket.emit("respond-draw", {
-                      roomId: localGameState.roomId,
-                      accept: true,
-                      fromSocket: incomingDrawOffer.fromSocket,
-                    });
-                    setIncomingDrawOffer(null);
-                    addToast(
-                      language === "vi"
-                        ? "Đã chấp nhận lời xin hòa"
-                        : "You accepted the draw",
-                      "success"
-                    );
-                  }}
-                  className="bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-2 px-4 rounded"
-                >
-                  {language === "vi" ? "Chấp nhận" : "Accept"}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Leave room confirmation modal */}
-        {showLeaveConfirm && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-            <div className="bg-white rounded-lg p-4 max-w-sm w-full shadow-xl border border-blue-100">
-              <div className="text-lg font-semibold text-gray-800 mb-2">
-                {language === "vi"
-                  ? "Bạn có chắc muốn rời phòng?"
-                  : "Are you sure you want to leave the room?"}
-              </div>
-              <div className="text-sm text-gray-600 mb-4">
-                {language === "vi"
-                  ? "Hành động này sẽ khiến bạn rời khỏi phòng hiện tại."
-                  : "This will remove you from the current room."}
-              </div>
-              <div className="flex justify-center gap-3">
-                <button
-                  onClick={() => setShowLeaveConfirm(false)}
-                  className="bg-white border border-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 px-4 rounded"
-                >
-                  {language === "vi" ? "Hủy" : "Cancel"}
-                </button>
-                <button
-                  onClick={() => confirmLeaveRoom()}
-                  className="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded"
-                >
-                  {language === "vi" ? "Rời phòng" : "Leave"}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Game Board + Chat (Chat moved below the board) */}
         <div className="bg-white/80 backdrop-blur-lg rounded-xl p-4 flex flex-col gap-4 justify-center overflow-x-auto">
@@ -1086,7 +849,247 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
               </div>
             </div>
           </div>
+          <div className="bg-white/80 backdrop-blur-lg rounded-xl mt-4 mb-4 border-blue-300/30">
+            {/* Game Over Message */}
+            {localGameState.status === "finished" && (
+              <div className="mt-4 backdrop-blur-lg rounded-xl p-6 border border-blue-300/30 text-center">
+                <p className="text-blue-700 text-sm font-bold mb-4">
+                  {getStatusMessage()}
+                </p>
+                <div className="flex items-center justify-center text-sm gap-4">
+                  {myPlayer &&
+                    localGameState.players.player1.socketId ===
+                      myPlayer.socketId && (
+                      <button
+                        onClick={() => {
+                          // owner can restart the game
+                          socket.emit("start-game", {
+                            roomId: localGameState.roomId,
+                          });
+                        }}
+                        className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-5 rounded-lg transition-all"
+                        title={t.startNew as string}
+                      >
+                        {t.startNew as string}
+                      </button>
+                    )}
 
+                  <button
+                    onClick={() => setShowLeaveConfirm(true)}
+                    className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-5 rounded-lg transition-all"
+                  >
+                    {t.leaveRoom as string}
+                  </button>
+                </div>
+              </div>
+            )}
+            {localGameState.status === "waiting" && (
+              <div className="mt-4 bg-yellow-100 border border-yellow-300 rounded-lg p-4">
+                {/* If current user is room owner, show start button + share info */}
+                {myPlayer &&
+                localGameState.players.player1.socketId ===
+                  myPlayer.socketId ? (
+                  <div>
+                    <div className="flex justify-center">
+                      <button
+                        onClick={() => {
+                          if (!localGameState.players.player2) {
+                            alert(t.cannotStart as string);
+                            return;
+                          }
+                          socket.emit("start-game", {
+                            roomId: localGameState.roomId,
+                          });
+                        }}
+                        className={`bg-blue-500 hover:bg-blue-600 text-white text-sm font-bold py-2 px-6 rounded-lg transition-all ${
+                          !localGameState.players.player2
+                            ? "opacity-50 cursor-not-allowed"
+                            : ""
+                        }`}
+                        disabled={!localGameState.players.player2}
+                        title={
+                          localGameState.players.player2
+                            ? (t.startButtonTitle as string)
+                            : (t.noOpponent as string)
+                        }
+                      >
+                        {t.startGame as string}
+                      </button>
+                    </div>
+                    <div className="flex justify-center mt-2">
+                      <button
+                        onClick={() => setShowLeaveConfirm(true)}
+                        className="bg-red-500 hover:bg-red-600 text-white text-sm font-bold py-2 px-6 rounded-lg"
+                      >
+                        {t.leaveRoom as string}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* Non-owner: show waiting message */
+                  <div className="flex flex-col items-center gap-3">
+                    <p className="text-blue-800 text-sm font-semibold text-center">
+                      {t.waitingOwnerStart as string}
+                    </p>
+                    <p className="text-sm text-gray-600 text-center">
+                      {t.ownerLabel as string}{" "}
+                      {localGameState.players.player1?.name ||
+                        (t.roomOwner as string)}
+                    </p>
+                    <div className="mt-2">
+                      <button
+                        onClick={() => setShowLeaveConfirm(true)}
+                        className="bg-red-500 hover:bg-red-600 text-white text-sm font-bold py-2 px-4 rounded-lg"
+                      >
+                        {t.leaveRoom as string}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          {/* Game Status */}
+
+          {/* Playing controls: offer draw button */}
+          {localGameState.status === "playing" && myPlayer && opponent && (
+            <div className="mb-1 flex justify-center gap-3">
+              <button
+                onClick={() => {
+                  try {
+                    socket.emit("offer-draw", {
+                      roomId: localGameState.roomId,
+                    });
+                    setDrawOfferSent(true);
+                  } catch {
+                    /* ignore */
+                  }
+                }}
+                className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-lg"
+              >
+                {language === "vi" ? "Xin hòa" : "Offer draw"}
+              </button>
+              {drawOfferSent && (
+                <div className="text-sm text-gray-500 flex items-center">
+                  {language === "vi"
+                    ? "Đã gửi lời xin hòa, chờ phản hồi..."
+                    : "Draw offer sent, waiting..."}
+                </div>
+              )}
+              <button
+                onClick={() => setShowLeaveConfirm(true)}
+                className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg"
+              >
+                {t.leaveRoom as string}
+              </button>
+            </div>
+          )}
+
+          {/* Incoming draw offer prompt */}
+          {incomingDrawOffer && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+              <div className="bg-white rounded-lg p-4 max-w-sm w-full shadow-xl border border-blue-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden">
+                    {/* show initial if no avatar available */}
+                    <div className="text-gray-700 font-semibold">
+                      {(incomingDrawOffer.fromName || "?").charAt(0)}
+                    </div>
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-lg font-semibold text-gray-800">
+                      {incomingDrawOffer.fromName ||
+                        (language === "vi" ? "Đối thủ" : "Opponent")}
+                    </div>
+                    <div className="text-lg text-gray-500">
+                      {language === "vi"
+                        ? "Đã gửi lời xin hòa"
+                        : "offered a draw"}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setIncomingDrawOffer(null)}
+                    className="text-gray-400 hover:text-gray-600"
+                    aria-label={language === "vi" ? "Đóng" : "Close"}
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="mt-4 flex gap-3 justify-center">
+                  <button
+                    onClick={() => {
+                      socket.emit("respond-draw", {
+                        roomId: localGameState.roomId,
+                        accept: false,
+                        fromSocket: incomingDrawOffer.fromSocket,
+                      });
+                      setIncomingDrawOffer(null);
+                      addToast(
+                        language === "vi"
+                          ? "Bạn đã từ chối lời xin hòa"
+                          : "You declined the draw",
+                        "info"
+                      );
+                    }}
+                    className="bg-white border border-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 px-4 rounded"
+                  >
+                    {language === "vi" ? "Từ chối" : "Decline"}
+                  </button>
+                  <button
+                    onClick={() => {
+                      socket.emit("respond-draw", {
+                        roomId: localGameState.roomId,
+                        accept: true,
+                        fromSocket: incomingDrawOffer.fromSocket,
+                      });
+                      setIncomingDrawOffer(null);
+                      addToast(
+                        language === "vi"
+                          ? "Đã chấp nhận lời xin hòa"
+                          : "You accepted the draw",
+                        "success"
+                      );
+                    }}
+                    className="bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-2 px-4 rounded"
+                  >
+                    {language === "vi" ? "Chấp nhận" : "Accept"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Leave room confirmation modal */}
+          {showLeaveConfirm && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+              <div className="bg-white rounded-lg p-4 max-w-sm w-full shadow-xl border border-blue-100">
+                <div className="text-lg font-semibold text-gray-800 mb-2">
+                  {language === "vi"
+                    ? "Bạn có chắc muốn rời phòng?"
+                    : "Are you sure you want to leave the room?"}
+                </div>
+                <div className="text-sm text-gray-600 mb-4">
+                  {language === "vi"
+                    ? "Hành động này sẽ khiến bạn rời khỏi phòng hiện tại."
+                    : "This will remove you from the current room."}
+                </div>
+                <div className="flex justify-center gap-3">
+                  <button
+                    onClick={() => setShowLeaveConfirm(false)}
+                    className="bg-white border border-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 px-4 rounded"
+                  >
+                    {language === "vi" ? "Hủy" : "Cancel"}
+                  </button>
+                  <button
+                    onClick={() => confirmLeaveRoom()}
+                    className="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded"
+                  >
+                    {language === "vi" ? "Rời phòng" : "Leave"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
           <div className="w-full">
             {/* Use a smaller chat height while a game is playing so the board stays prominent */}
             <ChatBox
@@ -1119,20 +1122,24 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
                         key={s.socketId || s.id || s.name}
                         className="flex flex-col items-center w-16"
                       >
-                        {s.avatar ? (
-                          <img
-                            src={s.avatar}
-                            alt={s.name}
-                            className="w-10 h-10 rounded-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-xs text-gray-700 font-semibold">
-                            {(s.name || "?").charAt(0).toUpperCase()}
-                          </div>
-                        )}
-                        <div className="text-xs text-gray-500 truncate w-16 text-center">
-                          {s.name || (t.guest as string)}
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedSpectator(s)}
+                          title={s.name || (t.guest as string)}
+                          className="inline-flex items-center justify-center"
+                        >
+                          {s.avatar ? (
+                            <img
+                              src={s.avatar}
+                              alt={s.name}
+                              className="w-10 h-10 rounded-full object-cover cursor-pointer"
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-xs text-gray-700 font-semibold cursor-pointer">
+                              {(s.name || "?").charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -1140,8 +1147,52 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
               </div>
             );
           })()}
+          {/* Spectator profile modal (opened when clicking an avatar) */}
+          {selectedSpectator && (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+              onClick={() => setSelectedSpectator(null)}
+            >
+              <div
+                className="bg-white rounded-lg p-6 max-w-sm w-full mx-4 shadow-xl border border-blue-100"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex flex-col items-center gap-4">
+                  <div className="w-24 h-24 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
+                    {selectedSpectator.avatar ? (
+                      <img
+                        src={selectedSpectator.avatar}
+                        alt={selectedSpectator.name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="text-3xl font-semibold text-gray-700">
+                        {(selectedSpectator.name || "?")
+                          .charAt(0)
+                          .toUpperCase()}
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-lg font-semibold text-gray-800">
+                    {selectedSpectator.name || (t.guest as string)}
+                  </div>
+                  <div className="text-sm text-gray-600">
+                    ELO: {selectedSpectator.elo ?? "—"}
+                  </div>
+                  <div className="mt-2">
+                    <button
+                      onClick={() => setSelectedSpectator(null)}
+                      className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
+                    >
+                      {language === "vi" ? "Đóng" : "Close"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
           {/* ELO table under chat (dynamic list) */}
-          <div className="mt-4 bg-white/90 backdrop-blur-lg rounded-xl p-4 border border-blue-200/30">
+          {/* <div className="mt-4 bg-white/90 backdrop-blur-lg rounded-xl p-4 border border-blue-200/30">
             <h3 className="text-sm font-semibold text-blue-700 mb-2">
               {t.eloTitle as string}
             </h3>
@@ -1178,7 +1229,7 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
                 </tbody>
               </table>
             </div>
-          </div>
+          </div> */}
         </div>
       </div>
     </div>

@@ -10,6 +10,7 @@ interface Props {
 
 export default function ProfileModal(props: Props) {
   const { user, onClose, onSignOut } = props;
+  const [profile, setProfile] = useState<AuthUser | null>(user || null);
   const [liteMode, setLiteMode] = useState(false);
   // const [showIndex, setShowIndex] = useState(false);
   const [zoomMode, setZoomMode] = useState(false);
@@ -103,7 +104,7 @@ export default function ProfileModal(props: Props) {
   const translations: Record<string, Record<string, string>> = {
     en: {
       profile: "PROFILE",
-      liteMode: "Lite Mode",
+      liteMode: "Hide message",
       showIndex: "Show index",
       zoomMode: "Zoom mode",
       name: "Name",
@@ -113,7 +114,7 @@ export default function ProfileModal(props: Props) {
     },
     vi: {
       profile: "HỒ SƠ",
-      liteMode: "Chế độ nhẹ",
+      liteMode: "Ẩn tin nhắn",
       showIndex: "Hiển thị chỉ mục",
       zoomMode: "Chế độ phóng to",
       name: "Tên",
@@ -123,9 +124,41 @@ export default function ProfileModal(props: Props) {
     },
   };
 
-  if (!user) return null;
   const t = translations[language] || translations.en;
 
+  // Refresh profile when modal opens (fetch latest from server)
+  useEffect(() => {
+    let mounted = true;
+    async function fetchProfile() {
+      if (!user?._id) return;
+      try {
+        const base = import.meta.env.VITE_API_BASE || "";
+        const res = await fetch(`${base}/api/user/${user._id}`);
+        if (!mounted) return;
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data && data.user) {
+          setProfile(data.user as AuthUser);
+          try {
+            // update localStorage so other tabs/readers can pick up latest on reload
+            localStorage.setItem("zcaro_user", JSON.stringify(data.user));
+          } catch {
+            /* ignore */
+          }
+        }
+      } catch (e) {
+        console.error("Failed to fetch profile", e);
+      }
+    }
+
+    fetchProfile();
+    return () => {
+      mounted = false;
+    };
+  }, [user?._id]);
+
+  if (!user) return null;
+  const displayUser = profile ?? user;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <button
@@ -149,15 +182,17 @@ export default function ProfileModal(props: Props) {
 
         <div className="px-8 py-6">
           <div className="flex flex-col items-center">
-            {user.avatar ? (
+            {displayUser?.avatar ? (
               <img
-                src={user.avatar}
-                alt={user.name}
+                src={displayUser.avatar}
+                alt={displayUser.name}
                 className="w-28 h-28 rounded-full"
               />
             ) : (
               <div className="w-28 h-28 bg-teal-500 rounded-full flex items-center justify-center text-white font-bold text-2xl">
-                {user.name ? user.name.charAt(0).toUpperCase() : "U"}
+                {displayUser?.name
+                  ? displayUser.name.charAt(0).toUpperCase()
+                  : "U"}
               </div>
             )}
 
@@ -210,7 +245,7 @@ export default function ProfileModal(props: Props) {
                 </label>
               </div> */}
 
-              <div className="flex items-center justify-between py-3 border-b">
+              {/* <div className="flex items-center justify-between py-3 border-b">
                 <div className="text-gray-800 font-medium">{t.zoomMode}</div>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
@@ -232,19 +267,28 @@ export default function ProfileModal(props: Props) {
                     }`}
                   />
                 </label>
-              </div>
+              </div> */}
 
               <div className="pt-4 text-gray-700 relative">
                 <div className="mb-2">
                   {t.name}:
                   <span className="font-medium ml-2">
-                    {user.name} -
-                    {typeof (user as AuthUser & { elo?: number }).elo !==
-                      "undefined" && (
-                      <span className="text-gray-500 ml-2">
-                        {(user as AuthUser & { elo?: number }).elo}
-                      </span>
-                    )}
+                    {displayUser?.name} -
+                    {(() => {
+                      const anyUser = displayUser as AuthUser & {
+                        elo?: number;
+                        rating?: number;
+                      };
+                      let eloVal: number | null = null;
+                      if (typeof anyUser.elo === "number") eloVal = anyUser.elo;
+                      else if (typeof anyUser.rating === "number")
+                        eloVal = anyUser.rating;
+                      if (eloVal !== null)
+                        return (
+                          <span className="text-gray-500 ml-2">{eloVal}</span>
+                        );
+                      return <span className="text-gray-500 ml-2">—</span>;
+                    })()}
                   </span>
                 </div>
 

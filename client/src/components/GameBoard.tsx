@@ -356,6 +356,8 @@ export default function GameBoard({
               ([vr, vc]) => vr === row && vc === col
             );
             const cellNumber = getCellNumber(row, col);
+            const isFirstMoveDisabled =
+              isFirstMoveRestriction && !isValidFirstCell && !cellLocked;
 
             return (
               <button
@@ -366,16 +368,19 @@ export default function GameBoard({
                 ${cellLocked ? "bg-black" : "bg-white"}
                 flex items-center justify-center relative
                 transition-all duration-200
+                ${isFirstMoveDisabled ? "cursor-not-allowed" : ""}
                 ${
+                  !isFirstMoveDisabled &&
                   isMyTurn &&
                   !isOccupied &&
                   !cellLocked &&
                   gameStatus === "playing" &&
                   (!isFirstMoveRestriction || isValidFirstCell)
                     ? "hover:bg-amber-200 cursor-pointer"
-                    : "cursor-not-allowed"
+                    : ""
                 }
                 ${isHovered && !isOccupied && !cellLocked ? "bg-amber-200" : ""}
+                ${isFirstMoveDisabled ? "bg-white text-white" : ""}
               `}
                 style={
                   window.innerWidth < 640
@@ -422,6 +427,7 @@ export default function GameBoard({
                 }}
                 onMouseEnter={() => {
                   if (
+                    !isFirstMoveDisabled &&
                     isMyTurn &&
                     !isOccupied &&
                     !cellLocked &&
@@ -485,14 +491,17 @@ export default function GameBoard({
                 {/* Cell number (faint gray - darker) - only show when cell is empty */}
                 {!cellLocked && !isOccupied && (
                   <span
-                    className="absolute text-gray-300 text-[10px] sm:text-xs opacity-70"
+                    className={`absolute text-[10px] sm:text-xs opacity-70 ${
+                      isFirstMoveDisabled
+                        ? "text-white opacity-100"
+                        : "text-gray-300"
+                    }`}
                     style={
                       window.innerWidth < 640
                         ? {
-                            color: "#c5c6c7", // tương đương text-gray-400
-                            opacity: 0.5, // làm nhạt chữ
-                            fontWeight: 300, // nhẹ hơn
-                            transform: "scale(0.9)", // co nhẹ lại
+                            opacity: isFirstMoveDisabled ? 1 : 0.5,
+                            fontWeight: 300,
+                            transform: "scale(0.9)",
                             transformOrigin: "center",
                           }
                         : {}
