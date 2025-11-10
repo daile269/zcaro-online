@@ -622,7 +622,7 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
       <Toasts toasts={toasts} onRemove={removeToast} />
       <div className="w-full max-w-[737.59px] mx-auto px-4">
         {/* Players info: avatars centered with names below, X VS O in middle */}
-        <div className="grid grid-cols-3 md:grid-cols-3 gap-4 mb-4 items-center">
+        <div className="grid grid-cols-3 md:grid-cols-3 gap-4 items-center">
           {/* Left player (player1 slot) */}
           <div className="flex flex-col items-center">
             <div className="relative w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 bg-white/80 backdrop-blur-lg rounded-full flex items-center justify-center">

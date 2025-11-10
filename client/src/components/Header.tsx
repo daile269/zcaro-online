@@ -37,7 +37,7 @@ export default function Header(props: Readonly<HeaderProps>) {
           <img src="./home.png" alt="Home" width={30} height={30} />
         </button>
         {/* Donate button centered in header */}
-        <div className="flex-1 flex justify-center">
+        {/* <div className="flex-1 flex justify-center">
           <button
             onClick={() => setShowDonate(true)}
             className="bg-yellow-400 hover:bg-yellow-450 text-black px-8 py-2 rounded-lg font-semibold shadow-sm"
@@ -45,7 +45,7 @@ export default function Header(props: Readonly<HeaderProps>) {
           >
             Donate
           </button>
-        </div>
+        </div> */}
         <div className="flex items-center gap-3">
           {user ? (
             <div className="flex items-center gap-3">
