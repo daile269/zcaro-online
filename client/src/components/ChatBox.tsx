@@ -40,7 +40,10 @@ export default function ChatBox({
   hideHistoryInRoom = false,
 }: Readonly<ChatBoxProps>) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [floating, setFloating] = useState<
+  // We only keep the setter because floating UI is currently commented out;
+  // keeping the setter allows ephemeral messages to be forwarded via onFloating
+  // and avoids an unused variable linter warning.
+  const [, setFloating] = useState<
     {
       id: string;
       sender: string;
@@ -302,7 +305,7 @@ export default function ChatBox({
 
   return (
     <div
-      className="w-full md:w-90 flex flex-col gap-2 bg-white border border-gray-200 rounded-lg shadow-sm p-3"
+      className="w-full md:w-90 flex flex-col gap-2 bg-white border border-gray-200 rounded-lg shadow-sm p-3 mb-2"
       style={containerStyle}
     >
       {/* Chat panel: cap height so chat stays short */}
@@ -376,7 +379,7 @@ export default function ChatBox({
       )}
 
       {/* Floating ephemeral messages overlay */}
-      {!liteMode && (
+      {/* {!liteMode && (
         <div className="floating-container">
           {floating.map((fm, idx) => {
             const cssVars: React.CSSProperties = {
@@ -407,7 +410,7 @@ export default function ChatBox({
             );
           })}
         </div>
-      )}
+      )} */}
 
       {/* Input area pinned to bottom (hidden in lite mode) */}
       {!liteMode && (

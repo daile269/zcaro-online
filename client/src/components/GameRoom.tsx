@@ -350,6 +350,8 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
 
   const timerRef = useRef<number | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
+  // Optional user-provided warning audio (placed in client/public/sounds or custom URL in localStorage)
+  const audioWarningRef = useRef<HTMLAudioElement | null>(null);
 
   // Helper to play a short tick sound
   const playTick = () => {
@@ -409,11 +411,46 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
     // reset the active player's timer to full when a new turn starts
     setTimers((t) => ({ ...t, [activeKey]: TURN_SECONDS }));
 
+    // initialize optional warning audio (try default public path or user-set URL)
+    try {
+      const url =
+        (typeof window !== "undefined" &&
+          (localStorage.getItem("zcaro-warning-url") || "/warning.mp3")) ||
+        null;
+      if (url) {
+        try {
+          const a = new Audio(url);
+          a.preload = "auto";
+          audioWarningRef.current = a;
+        } catch {
+          /* ignore */
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+
     timerRef.current = globalThis.setInterval(() => {
       setTimers((t) => {
         const current = t[activeKey];
         if (current > 0) {
-          playTick();
+          // If remaining time is in the last 10s, try to play user warning sound once per second.
+          if (current <= 10) {
+            const a = audioWarningRef.current;
+            if (a) {
+              try {
+                a.currentTime = 0;
+                // play() may reject if not interacted, fallback to synth tick
+                a.play().catch(() => playTick());
+              } catch {
+                playTick();
+              }
+            } else {
+              playTick();
+            }
+          } else {
+            playTick();
+          }
           const updated = { ...t, [activeKey]: current - 1 };
           if (current - 1 <= 0) {
             // emit timeout event (the server will handle awarding win)
@@ -587,7 +624,7 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
         {/* Players info: avatars centered with names below, X VS O in middle */}
         <div className="grid grid-cols-3 md:grid-cols-3 gap-4 mb-4 items-center">
           {/* Left player (player1 slot) */}
-          <div className="flex flex-col items-center gap-2">
+          <div className="flex flex-col items-center">
             <div className="relative w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 bg-white/80 backdrop-blur-lg rounded-full flex items-center justify-center">
               {leftPlayer?.avatar ? (
                 <img
@@ -702,7 +739,7 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
           </div>
 
           {/* Right player (player2 slot) */}
-          <div className="flex flex-col items-center gap-2">
+          <div className="flex flex-col items-center">
             <div className="relative w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 bg-white/80 backdrop-blur-lg rounded-full flex items-center justify-center">
               {rightPlayer?.avatar ? (
                 <img
@@ -797,7 +834,7 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
         {/* Room code removed: not displayed per user request */}
 
         {/* Game Board + Chat (Chat moved below the board) */}
-        <div className="bg-white/80 backdrop-blur-lg rounded-xl p-4 flex flex-col gap-4 justify-center overflow-x-auto">
+        <div className="bg-white/80 backdrop-blur-lg rounded-xl flex flex-col justify-center overflow-x-auto">
           <div ref={boardRef} className="w-full flex justify-center">
             <div className="relative w-full flex justify-center">
               <GameBoard
@@ -883,7 +920,7 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
               </div>
             )}
             {localGameState.status === "waiting" && (
-              <div className="mt-4 border border-yellow-300 rounded-lg p-4">
+              <div className="border border-yellow-300 rounded-lg p-4 mb-2">
                 {/* If current user is room owner, show start button + share info */}
                 {myPlayer &&
                 localGameState.players.player1.socketId ===
@@ -1107,7 +1144,7 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
             );
             if (spectators.length === 0) return null;
             return (
-              <div className="mb-4 bg-white/80 backdrop-blur-lg rounded-xl p-3 border border-blue-600/20">
+              <div className="mb-4 bg-white/80 backdrop-blur-lg rounded-xl p-3 mb-2 border border-blue-600/20">
                 <div className="flex items-center gap-3">
                   <div className="text-sm text-gray-600">
                     {(t.spectators as (n: number) => string)(spectators.length)}

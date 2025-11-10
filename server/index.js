@@ -31,6 +31,13 @@ const onlineUsers = new Map();
 const pendingRoomTimeouts = new Map();
 // How long to keep a room when a player disconnects (ms)
 const RECONNECT_GRACE_MS = 120 * 1000;
+// For ranked matches, when a player disconnects we wait a shorter period
+// before removing the room. Explicit leave (leave-room) for ranked matches
+// will remove the room immediately (handled in leave-room handler below).
+const RANKED_PENDING_REMOVE_MS = Number.parseInt(
+  process.env.RANKED_PENDING_REMOVE_MS || String(45 * 1000),
+  10
+);
 
 // Helper: enrich chat messages with avatar (from onlineUsers map or DB)
 async function enrichMessagesWithAvatars(messages) {
@@ -1424,14 +1431,50 @@ io.on("connection", (socket) => {
             }
           }
 
-          // Remove the player2 slot and return room to waiting state so owner can wait or start a new round
-          gs.players.player2 = null;
-          gs.status = "waiting";
-          gs.winner = null;
-          gs.winningCells = [];
+          // After a non-owner explicit leave: for rated rooms we remove the room
+          // immediately; for unrated rooms we return to 'waiting' (owner can
+          // wait for or invite another player).
+          const current = gameManager.getRoom(roomId) || gs;
+          if (current && current.rated === true) {
+            try {
+              io.to(roomId).emit("room-removed", {
+                roomId,
+                reason: "player-left",
+              });
+            } catch (e) {
+              /* ignore */
+            }
 
-          const enriched = await attachEloToGameState(gs);
-          io.to(roomId).emit("room-joined", { gameState: enriched });
+            try {
+              clearPendingRoomTimer(roomId);
+            } catch (e) {
+              /* ignore */
+            }
+
+            try {
+              gameManager.removeRoom(roomId);
+            } catch (e) {
+              console.error(
+                "Failed to remove room on player2 leave (rated)",
+                e
+              );
+            }
+
+            try {
+              emitRoomsList();
+            } catch (e) {
+              /* ignore */
+            }
+          } else {
+            // Unrated: keep room, clear player2 slot and set back to waiting
+            current.players.player2 = null;
+            current.status = "waiting";
+            current.winner = null;
+            current.winningCells = [];
+
+            const enriched = await attachEloToGameState(current);
+            io.to(roomId).emit("room-joined", { gameState: enriched });
+          }
         } catch (e) {
           console.error("Error handling player2 leave", e);
         }
@@ -1485,10 +1528,15 @@ io.on("connection", (socket) => {
           gameState.players.player1?.socketId === socket.id ||
           gameState.players.player2?.socketId === socket.id
         ) {
+          // Determine grace period: rated rooms use a shorter grace window
+          const graceMs = gameState.rated
+            ? RANKED_PENDING_REMOVE_MS
+            : RECONNECT_GRACE_MS;
+
           // Inform remaining sockets in the room that a player temporarily left
           socket.to(roomId).emit("player-disconnected-temporary", {
             socketId: socket.id,
-            graceMs: RECONNECT_GRACE_MS,
+            graceMs,
           });
 
           // Mutate the stored game state to mark the player slot as empty (preserve other state)
@@ -1539,7 +1587,7 @@ io.on("connection", (socket) => {
               } finally {
                 pendingRoomTimeouts.delete(roomId);
               }
-            }, RECONNECT_GRACE_MS);
+            }, graceMs);
             pendingRoomTimeouts.set(roomId, t);
           }
         } else {

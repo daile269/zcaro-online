@@ -238,6 +238,66 @@ export default function GameBoard({
     (winningCells || []).map(([r, c]) => `${r}-${c}`)
   );
 
+  // Track previous board state so we can determine which symbol(s) were placed
+  const prevBoardRef = useRef<(string | null)[][] | null>(null);
+  // Keep the most recent move so we can highlight it briefly
+  const [lastMove, setLastMove] = useState<{
+    r: number;
+    c: number;
+    symbol: string;
+  } | null>(null);
+  const lastMoveTimerRef = useRef<number | null>(null);
+  useEffect(() => {
+    try {
+      const prev = prevBoardRef.current;
+      if (!prev) {
+        prevBoardRef.current = renderedBoard.map((r) => [...r]);
+        return;
+      }
+
+      // Find newly placed cells (prev was null, now not null)
+      for (let r = 0; r < BOARD_SIZE; r++) {
+        for (let c = 0; c < BOARD_SIZE; c++) {
+          try {
+            const was = prev?.[r]?.[c] ?? null;
+            const now = renderedBoard?.[r]?.[c] ?? null;
+            if (was == null && now != null) {
+              // If this was the local move, a suppress flag will be set so
+              // we avoid double-playing; otherwise play by symbol.
+              if (suppressNextBoardSound.current) {
+                suppressNextBoardSound.current = false;
+              } else {
+                playMoveSound(now as string);
+              }
+              // Track the most recent move and clear after a short timeout
+              try {
+                setLastMove({ r, c, symbol: now as string });
+                if (lastMoveTimerRef.current) {
+                  clearTimeout(lastMoveTimerRef.current);
+                }
+                // keep highlight for 2000ms per user's request
+                lastMoveTimerRef.current = window.setTimeout(() => {
+                  setLastMove(null);
+                  lastMoveTimerRef.current = null;
+                }, 45000);
+              } catch {
+                /* ignore */
+              }
+            }
+          } catch {
+            /* ignore individual cell errors */
+          }
+        }
+      }
+
+      // Save snapshot for next diff
+      prevBoardRef.current = renderedBoard.map((r) => [...r]);
+    } catch {
+      /* ignore */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [board]);
+
   // Normalize incoming board to a fixed BOARD_SIZE x BOARD_SIZE so rendering
   // is safe even if server sends different dimensions. Missing cells are
   // treated as null (empty).
@@ -272,6 +332,184 @@ export default function GameBoard({
   const [optimisticPlaced, setOptimisticPlaced] = useState<
     Record<string, string>
   >({});
+
+  // Sound: play when a move is made (either local confirm or opponent move)
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const suppressNextBoardSound = useRef(false);
+  const moveAudioRef = useRef<HTMLAudioElement | null>(null);
+  const moveAudioXRef = useRef<HTMLAudioElement | null>(null);
+  const moveAudioORef = useRef<HTMLAudioElement | null>(null);
+  // prevent accidental double-play by ignoring plays within this short window
+  const lastPlayAtRef = useRef<number>(0);
+
+  // Try to preload a move sound either from a configured URL in localStorage
+  // or from common public paths. If found, we'll prefer that audio element.
+  useEffect(() => {
+    try {
+      const custom = (() => {
+        try {
+          return localStorage.getItem("zcaro-move-sound-url");
+        } catch {
+          return null;
+        }
+      })();
+
+      if (custom) {
+        const a = new Audio(custom);
+        a.preload = "auto";
+        a.addEventListener("canplaythrough", () => {
+          moveAudioRef.current = a;
+        });
+        a.addEventListener("error", () => {
+          /* ignore */
+        });
+        a.load();
+        return;
+      }
+
+      const candidates = ["/move.mp3", "/move-sound.mp3", "/sounds/move.mp3"];
+      // Try symbol-specific public files first
+      try {
+        const xa = new Audio("/soundx.mp3");
+        xa.preload = "auto";
+        xa.addEventListener("canplaythrough", () => {
+          if (!moveAudioXRef.current) moveAudioXRef.current = xa;
+        });
+        xa.addEventListener("error", () => {});
+        xa.load();
+      } catch {
+        /* ignore */
+      }
+      try {
+        const oa = new Audio("/soundo.mp3");
+        oa.preload = "auto";
+        oa.addEventListener("canplaythrough", () => {
+          if (!moveAudioORef.current) moveAudioORef.current = oa;
+        });
+        oa.addEventListener("error", () => {});
+        oa.load();
+      } catch {
+        /* ignore */
+      }
+      for (const p of candidates) {
+        try {
+          const a = new Audio(p);
+          a.preload = "auto";
+          a.addEventListener("canplaythrough", () => {
+            if (!moveAudioRef.current) moveAudioRef.current = a;
+          });
+          a.addEventListener("error", () => {
+            /* ignore */
+          });
+          a.load();
+        } catch {
+          /* ignore */
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const playMoveSound = (symbol?: string) => {
+    // avoid double-play: ignore if we played very recently
+    try {
+      const nowMs = Date.now();
+      if (nowMs - lastPlayAtRef.current < 250) return;
+      lastPlayAtRef.current = nowMs;
+    } catch {
+      /* ignore */
+    }
+    try {
+      // If we preloaded a symbol-specific audio element (custom or public), use it.
+      try {
+        // prefer symbol-specific audio
+        if (symbol === "X" && moveAudioXRef.current) {
+          const p = moveAudioXRef.current;
+          try {
+            p.currentTime = 0;
+          } catch {
+            /* ignore */
+          }
+          p.volume = 0.9;
+          p.play().catch(() => {});
+          return;
+        }
+        if (symbol === "O" && moveAudioORef.current) {
+          const p = moveAudioORef.current;
+          try {
+            p.currentTime = 0;
+          } catch {
+            /* ignore */
+          }
+          p.volume = 0.9;
+          p.play().catch(() => {});
+          return;
+        }
+
+        const pre = moveAudioRef.current;
+        if (pre) {
+          try {
+            pre.currentTime = 0;
+          } catch {
+            /* ignore */
+          }
+          pre.volume = 0.9;
+          pre.play().catch(() => {
+            /* ignore */
+          });
+          return;
+        }
+      } catch {
+        /* ignore */
+      }
+
+      // Next: check for on-the-fly custom URL in localStorage
+      let url: string | null = null;
+      try {
+        url = localStorage.getItem("zcaro-move-sound-url");
+      } catch {
+        url = null;
+      }
+
+      if (url) {
+        const a = new Audio(url);
+        a.volume = 0.9;
+        a.play().catch(() => {
+          /* ignore play errors */
+        });
+        return;
+      }
+
+      // Fallback: short click using WebAudio oscillator
+      const Ctx = window.AudioContext;
+      if (!Ctx) return;
+      if (!audioCtxRef.current) audioCtxRef.current = new Ctx();
+      const ctx = audioCtxRef.current;
+
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = "sine";
+      o.frequency.value = 880; // A5-ish click
+      g.gain.value = 0.0001;
+      o.connect(g);
+      g.connect(ctx.destination);
+
+      // quick envelope for a click
+      const now = ctx.currentTime;
+      g.gain.cancelScheduledValues(now);
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.exponentialRampToValueAtTime(0.08, now + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
+
+      o.start(now);
+      o.stop(now + 0.13);
+
+      // don't close AudioContext; reuse for subsequent plays
+    } catch {
+      /* ignore */
+    }
+  };
 
   // When the parent signals an invalid/failed move (move-error), it will
   // increment `optimisticInvalidateKey`. Clear optimisticPlaced when that
@@ -417,7 +655,11 @@ export default function GameBoard({
                       /* ignore */
                     }
                     setSelectedCell(null);
+                    // suppress the next board-update-triggered sound because
+                    // we play immediately for the local player
+                    suppressNextBoardSound.current = true;
                     onCellClick(row, col);
+                    playMoveSound(mySymbol);
                     return;
                   }
 
@@ -486,6 +728,24 @@ export default function GameBoard({
                     }}
                   />
                 )}
+
+                {/* Last move highlight: slightly darker tint for both X and O (clears after 2s) */}
+                {lastMove &&
+                  lastMove.r === row &&
+                  lastMove.c === col &&
+                  !cellLocked && (
+                    <div
+                      className="absolute inset-0 pointer-events-none"
+                      style={{
+                        backgroundColor:
+                          lastMove.symbol === "X"
+                            ? "rgba(170, 21, 21, 0.18)"
+                            : "rgba(70, 205, 76, 0.601)",
+                        borderRadius: 6,
+                        zIndex: 0,
+                      }}
+                    />
+                  )}
 
                 {/* Cell number (faint gray - darker) - only show when cell is empty */}
                 {!cellLocked && !isOccupied && (
