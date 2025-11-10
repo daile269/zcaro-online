@@ -136,7 +136,7 @@ export default function ChatBox({
     },
     en: {
       placeholder: "Send a message...",
-      sendButton: "➤ Send",
+      sendButton: "➤",
       playerPrefix: "Player",
       anon: "Anon",
     },
