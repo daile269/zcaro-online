@@ -3,7 +3,6 @@ import { useState, useEffect, useRef } from "react";
 interface GameBoardProps {
   board: (string | null)[][];
   onCellClick: (row: number, col: number) => void;
-  currentTurn: string;
   mySymbol: string;
   isMyTurn: boolean;
   gameStatus: string;
@@ -21,7 +20,6 @@ const BOARD_SIZE = 17; // enforce a 17x17 board as requested
 export default function GameBoard({
   board,
   onCellClick,
-  currentTurn,
   mySymbol,
   isMyTurn,
   gameStatus,
@@ -348,10 +346,11 @@ export default function GameBoard({
               selectedCell?.[0] === row && selectedCell?.[1] === col;
             const isOccupied = renderedBoard[row][col] !== null;
             const cellLocked = isLocked(row, col);
-            // If it's the very first move (moveCount === 0) and X must play first,
-            // restrict allowed cells to validFirstMoveCells for player X.
-            const isFirstMoveRestriction =
-              moveCount === 0 && currentTurn === "X";
+            // If it's the very first move (moveCount === 0), restrict allowed cells
+            // to `validFirstMoveCells` for the player who starts the round. The
+            // starter is represented by `currentTurn` at moveCount===0, so we apply
+            // the restriction whenever moveCount === 0 (not hard-coded to 'X').
+            const isFirstMoveRestriction = moveCount === 0;
             const isValidFirstCell = validFirstMoveCells.some(
               ([vr, vc]) => vr === row && vc === col
             );

@@ -132,10 +132,19 @@ async function attachEloToGameState(gameState) {
     if (p1) {
       const u1 = await User.findOne({ socketId: p1.socketId }).lean();
       if (u1) p1.elo = u1.elo ?? u1.rating ?? u1.rating;
+      else {
+        // fallback to in-memory onlineUsers map so short-lived sockets still show a rating
+        const online = onlineUsers.get(p1.socketId);
+        if (online && typeof online.elo === "number") p1.elo = online.elo;
+      }
     }
     if (p2) {
       const u2 = await User.findOne({ socketId: p2.socketId }).lean();
       if (u2) p2.elo = u2.elo ?? u2.rating ?? u2.rating;
+      else {
+        const online = onlineUsers.get(p2.socketId);
+        if (online && typeof online.elo === "number") p2.elo = online.elo;
+      }
     }
     // spectators
     if (Array.isArray(gameState.spectators)) {
@@ -375,100 +384,107 @@ io.on("connection", (socket) => {
   });
 
   // Create a new room (persist a user record for this socket)
-  socket.on("create-room", async ({ playerName, roomId: requestedRoomId }) => {
-    // require authenticated user (must have been identified via /auth/google and 'identify' socket event)
-    try {
-      const authUser = await User.findOne({ socketId: socket.id }).lean();
-      if (!authUser || !authUser.googleId) {
+  socket.on(
+    "create-room",
+    async ({ playerName, roomId: requestedRoomId, rated }) => {
+      // require authenticated user (must have been identified via /auth/google and 'identify' socket event)
+      try {
+        const authUser = await User.findOne({ socketId: socket.id }).lean();
+        if (!authUser || !authUser.googleId) {
+          socket.emit("auth-required", {
+            message: "You must sign in with Google to create a room.",
+          });
+          return;
+        }
+      } catch (e) {
+        console.error("Auth check failed", e);
         socket.emit("auth-required", {
-          message: "You must sign in with Google to create a room.",
+          message: "Authentication check failed",
         });
         return;
       }
-    } catch (e) {
-      console.error("Auth check failed", e);
-      socket.emit("auth-required", { message: "Authentication check failed" });
-      return;
-    }
-    // allow client to request a custom roomId (trim and basic sanitize)
-    const playerNameFinal = playerName || `Player ${socket.id.slice(0, 6)}`;
-    let roomId = null;
-    if (requestedRoomId && typeof requestedRoomId === "string") {
-      const clean = requestedRoomId.trim();
-      if (clean.length > 0 && clean.length <= 64) {
-        roomId = clean;
+      // allow client to request a custom roomId (trim and basic sanitize)
+      const playerNameFinal = playerName || `Player ${socket.id.slice(0, 6)}`;
+      let roomId = null;
+      if (requestedRoomId && typeof requestedRoomId === "string") {
+        const clean = requestedRoomId.trim();
+        if (clean.length > 0 && clean.length <= 64) {
+          roomId = clean;
+        }
       }
-    }
-    // fallback to generated id
-    if (!roomId) {
-      roomId = `room-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-    }
+      // fallback to generated id
+      if (!roomId) {
+        roomId = `room-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      }
 
-    // if requested custom id exists, reject
-    if (requestedRoomId && gameManager.getRoom(roomId)) {
-      socket.emit("room-exists", {
-        message: `Mã phòng đã tồn tại: ${roomId}`,
-        roomId,
-      });
-      return;
-    }
-
-    // Persist or update user record for this socket connection
-    try {
-      await User.findOneAndUpdate(
-        { socketId: socket.id },
-        { $set: { name: playerNameFinal }, $setOnInsert: { elo: 1200 } },
-        { upsert: true, new: true }
-      );
-    } catch (e) {
-      console.error("Failed to upsert user on create-room", e);
-    }
-    // Read persisted user (to get avatar if present)
-    let userDoc = null;
-    try {
-      userDoc = await User.findOne({ socketId: socket.id }).lean();
-    } catch (e) {
-      console.error("Failed to load user after upsert", e);
-    }
-
-    // Add to online users map and broadcast
-    try {
-      if (userDoc) {
-        onlineUsers.set(socket.id, {
-          socketId: socket.id,
-          name: userDoc.name || `Player ${socket.id.slice(0, 6)}`,
-          avatar: userDoc.avatar || null,
-          elo: userDoc.elo ?? userDoc.rating ?? null,
-          _id: userDoc._id,
+      // if requested custom id exists, reject
+      if (requestedRoomId && gameManager.getRoom(roomId)) {
+        socket.emit("room-exists", {
+          message: `Mã phòng đã tồn tại: ${roomId}`,
+          roomId,
         });
-        emitOnlineUsers();
+        return;
       }
-    } catch (e) {
-      // non-fatal
-      console.error("Failed to add online user after create-room", e);
-    }
 
-    const newGameState = gameManager.createRoom(roomId, {
-      id: socket.id,
-      socketId: socket.id,
-      name: userDoc?.name || playerNameFinal,
-      avatar: userDoc?.avatar || null,
-      // Mark rooms explicitly created by a user as unrated by default
-      rated: false,
-      // mark this room as private/explicitly created - clients should treat it as
-      // requiring a code to take a player slot; others should only spectate by default
-      private: true,
-    });
-    socket.join(roomId);
-    const enriched = await attachEloToGameState(newGameState);
-    socket.emit("room-created", { roomId, gameState: enriched });
-    // Notify all clients that rooms changed
-    try {
-      emitRoomsList();
-    } catch (e) {
-      // ignore
+      // Persist or update user record for this socket connection
+      try {
+        await User.findOneAndUpdate(
+          { socketId: socket.id },
+          { $set: { name: playerNameFinal }, $setOnInsert: { elo: 1200 } },
+          { upsert: true, new: true }
+        );
+      } catch (e) {
+        console.error("Failed to upsert user on create-room", e);
+      }
+      // Read persisted user (to get avatar if present)
+      let userDoc = null;
+      try {
+        userDoc = await User.findOne({ socketId: socket.id }).lean();
+      } catch (e) {
+        console.error("Failed to load user after upsert", e);
+      }
+
+      // Add to online users map and broadcast
+      try {
+        if (userDoc) {
+          onlineUsers.set(socket.id, {
+            socketId: socket.id,
+            name: userDoc.name || `Player ${socket.id.slice(0, 6)}`,
+            avatar: userDoc.avatar || null,
+            elo: userDoc.elo ?? userDoc.rating ?? null,
+            _id: userDoc._id,
+          });
+          emitOnlineUsers();
+        }
+      } catch (e) {
+        // non-fatal
+        console.error("Failed to add online user after create-room", e);
+      }
+
+      const newGameState = gameManager.createRoom(roomId, {
+        id: socket.id,
+        socketId: socket.id,
+        name: userDoc?.name || playerNameFinal,
+        avatar: userDoc?.avatar || null,
+        // Allow client to request a rated room explicitly. By default (no
+        // explicit `rated: true`), user-created rooms are unrated so they don't
+        // affect rankings unless the client requests it.
+        rated: rated === true,
+        // mark this room as private/explicitly created - clients should treat it as
+        // requiring a code to take a player slot; others should only spectate by default
+        private: true,
+      });
+      socket.join(roomId);
+      const enriched = await attachEloToGameState(newGameState);
+      socket.emit("room-created", { roomId, gameState: enriched });
+      // Notify all clients that rooms changed
+      try {
+        emitRoomsList();
+      } catch (e) {
+        // ignore
+      }
     }
-  });
+  );
 
   // Join a room (send chat history if available)
   socket.on("join-room", async ({ roomId, playerName }) => {
@@ -736,6 +752,8 @@ io.on("connection", (socket) => {
         socketId: socket.id,
         name: curUser?.name || playerName || `Player ${socket.id.slice(0, 6)}`,
         avatar: curUser?.avatar || null,
+        // auto-match rooms are ranked by default
+        rated: true,
       });
       socket.join(match.roomId);
 
@@ -1218,40 +1236,196 @@ io.on("connection", (socket) => {
       const gs = gameManager.getRoom(roomId);
       if (!gs) return;
 
-      // If owner (player1) leaves, remove the whole room (existing behavior)
+      // If owner (player1) leaves
       if (gs.players.player1?.socketId === socket.id) {
         try {
-          io.to(roomId).emit("room-removed", { roomId, reason: "owner-left" });
-        } catch (e) {
-          /* ignore */
-        }
+          // If a game is currently playing, treat owner leaving as a forfeit
+          if (gs.status === "playing") {
+            try {
+              console.log(
+                `[FORFEIT] owner leaving during play -> room=${roomId} socket=${socket.id}`
+              );
+              const updated = gameManager.forfeit(roomId, socket.id);
+              if (updated) {
+                console.log("Room info at forfeit (owner-left):", {
+                  roomId: updated.roomId,
+                  rated: updated.rated,
+                  status: updated.status,
+                  winner: updated.winner,
+                  p1: updated.players?.player1
+                    ? {
+                        name: updated.players.player1.username,
+                        elo: updated.players.player1.elo,
+                      }
+                    : null,
+                  p2: updated.players?.player2
+                    ? {
+                        name: updated.players.player2.username,
+                        elo: updated.players.player2.elo,
+                      }
+                    : null,
+                });
+                const enrichedEnd = await attachEloToGameState(updated);
+                io.to(roomId).emit("game-ended", {
+                  gameState: enrichedEnd,
+                  reason: "forfeit",
+                });
 
-        try {
-          clearPendingRoomTimer(roomId);
-        } catch (e) {
-          /* ignore */
-        }
+                // If both players existed, update ELOs (only for rated games)
+                const p1 = updated.players.player1;
+                const p2 = updated.players.player2;
+                if (p1 && p2) {
+                  const winnerSocket =
+                    updated.winner === p1.symbol ? p1.socketId : p2.socketId;
+                  console.debug(
+                    `[ELO] about to call updateEloForMatch room=${updated.roomId} p1=${p1.socketId} p2=${p2.socketId} winnerSocket=${winnerSocket} rated=${updated.rated}`
+                  );
+                  try {
+                    if (updated.rated === false) {
+                      console.log(
+                        `Skipping ELO update for unrated room ${updated.roomId} (forfeit owner-left)`
+                      );
+                    } else {
+                      const res = await updateEloForMatch(
+                        io,
+                        updated.roomId,
+                        p1.socketId,
+                        p2.socketId,
+                        winnerSocket,
+                        false
+                      );
+                      console.debug(
+                        `[ELO] updateEloForMatch result for room=${
+                          updated.roomId
+                        }: ${JSON.stringify(res)}`
+                      );
+                    }
+                  } catch (e) {
+                    console.error(
+                      "Failed to update ELO after owner forfeit",
+                      e
+                    );
+                  }
+                }
+              }
+            } catch (e) {
+              console.error("Error applying forfeit for owner leave", e);
+            }
+          }
 
-        try {
-          gameManager.removeRoom(roomId);
-        } catch (e) {
-          console.error("Failed to remove room on owner leave", e);
-        }
+          // Owner left — remove the room (preserve existing behavior)
+          try {
+            io.to(roomId).emit("room-removed", {
+              roomId,
+              reason: "owner-left",
+            });
+          } catch (e) {
+            /* ignore */
+          }
 
-        try {
-          emitRoomsList();
+          try {
+            clearPendingRoomTimer(roomId);
+          } catch (e) {
+            /* ignore */
+          }
+
+          try {
+            gameManager.removeRoom(roomId);
+          } catch (e) {
+            console.error("Failed to remove room on owner leave", e);
+          }
+
+          try {
+            emitRoomsList();
+          } catch (e) {
+            /* ignore */
+          }
         } catch (e) {
-          /* ignore */
+          console.error("Error handling owner leave", e);
         }
 
         return;
       }
 
-      // If the leaving socket is player2 (non-owner), clear that slot and keep the room
+      // If the leaving socket is player2 (non-owner)
       if (gs.players.player2?.socketId === socket.id) {
         try {
+          // If a game is currently playing, treat leaving as a forfeit
+          if (gs.status === "playing") {
+            try {
+              console.log(
+                `[FORFEIT] player leaving during play -> room=${roomId} socket=${socket.id}`
+              );
+              const updated = gameManager.forfeit(roomId, socket.id);
+              if (updated) {
+                console.log("Room info at forfeit (player-left):", {
+                  roomId: updated.roomId,
+                  rated: updated.rated,
+                  status: updated.status,
+                  winner: updated.winner,
+                  p1: updated.players?.player1
+                    ? {
+                        name: updated.players.player1.username,
+                        elo: updated.players.player1.elo,
+                      }
+                    : null,
+                  p2: updated.players?.player2
+                    ? {
+                        name: updated.players.player2.username,
+                        elo: updated.players.player2.elo,
+                      }
+                    : null,
+                });
+                const enrichedEnd = await attachEloToGameState(updated);
+                io.to(roomId).emit("game-ended", {
+                  gameState: enrichedEnd,
+                  reason: "forfeit",
+                });
+
+                // If both players existed, update ELOs (only for rated games)
+                const p1 = updated.players.player1;
+                const p2 = updated.players.player2;
+                if (p1 && p2) {
+                  const winnerSocket =
+                    updated.winner === p1.symbol ? p1.socketId : p2.socketId;
+                  console.debug(
+                    `[ELO] about to call updateEloForMatch room=${updated.roomId} p1=${p1.socketId} p2=${p2.socketId} winnerSocket=${winnerSocket} rated=${updated.rated}`
+                  );
+                  try {
+                    if (updated.rated === false) {
+                      console.log(
+                        `Skipping ELO update for unrated room ${updated.roomId} (forfeit player-left)`
+                      );
+                    } else {
+                      const res = await updateEloForMatch(
+                        io,
+                        updated.roomId,
+                        p1.socketId,
+                        p2.socketId,
+                        winnerSocket,
+                        false
+                      );
+                      console.debug(
+                        `[ELO] updateEloForMatch result for room=${
+                          updated.roomId
+                        }: ${JSON.stringify(res)}`
+                      );
+                    }
+                  } catch (e) {
+                    console.error(
+                      "Failed to update ELO after player forfeit",
+                      e
+                    );
+                  }
+                }
+              }
+            } catch (e) {
+              console.error("Error applying forfeit for player2 leave", e);
+            }
+          }
+
+          // Remove the player2 slot and return room to waiting state so owner can wait or start a new round
           gs.players.player2 = null;
-          // If a game was in progress, move it back to waiting so owner can wait or start a new round
           gs.status = "waiting";
           gs.winner = null;
           gs.winningCells = [];
@@ -1422,6 +1596,8 @@ setInterval(async () => {
           socketId: sid,
           name: curUser?.name || `Player ${sid.slice(0, 6)}`,
           avatar: curUser?.avatar || null,
+          // auto-match rooms are ranked by default
+          rated: true,
         });
 
         const requesterSocket = io.sockets.sockets.get(sid);

@@ -803,7 +803,6 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
               <GameBoard
                 board={localGameState.board}
                 onCellClick={handleCellClick}
-                currentTurn={localGameState.currentTurn}
                 mySymbol={mySymbol}
                 isMyTurn={isMyTurn}
                 gameStatus={localGameState.status}
@@ -849,10 +848,10 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
               </div>
             </div>
           </div>
-          <div className="bg-white/80 backdrop-blur-lg rounded-xl mt-4 mb-4 border-blue-300/30">
+          <div className="bg-white/80 backdrop-blur-lg rounded-xl border-blue-300/30">
             {/* Game Over Message */}
             {localGameState.status === "finished" && (
-              <div className="mt-4 backdrop-blur-lg rounded-xl p-6 border border-blue-300/30 text-center">
+              <div className="backdrop-blur-lg rounded-xl p-6 border border-blue-300/30 text-center">
                 <p className="text-blue-700 text-sm font-bold mb-4">
                   {getStatusMessage()}
                 </p>
@@ -884,46 +883,43 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
               </div>
             )}
             {localGameState.status === "waiting" && (
-              <div className="mt-4 bg-yellow-100 border border-yellow-300 rounded-lg p-4">
+              <div className="mt-4 border border-yellow-300 rounded-lg p-4">
                 {/* If current user is room owner, show start button + share info */}
                 {myPlayer &&
                 localGameState.players.player1.socketId ===
                   myPlayer.socketId ? (
-                  <div>
-                    <div className="flex justify-center">
-                      <button
-                        onClick={() => {
-                          if (!localGameState.players.player2) {
-                            alert(t.cannotStart as string);
-                            return;
-                          }
-                          socket.emit("start-game", {
-                            roomId: localGameState.roomId,
-                          });
-                        }}
-                        className={`bg-blue-500 hover:bg-blue-600 text-white text-sm font-bold py-2 px-6 rounded-lg transition-all ${
-                          !localGameState.players.player2
-                            ? "opacity-50 cursor-not-allowed"
-                            : ""
-                        }`}
-                        disabled={!localGameState.players.player2}
-                        title={
-                          localGameState.players.player2
-                            ? (t.startButtonTitle as string)
-                            : (t.noOpponent as string)
+                  <div className="flex justify-center gap-3">
+                    <button
+                      onClick={() => {
+                        if (!localGameState.players.player2) {
+                          alert(t.cannotStart as string);
+                          return;
                         }
-                      >
-                        {t.startGame as string}
-                      </button>
-                    </div>
-                    <div className="flex justify-center mt-2">
-                      <button
-                        onClick={() => setShowLeaveConfirm(true)}
-                        className="bg-red-500 hover:bg-red-600 text-white text-sm font-bold py-2 px-6 rounded-lg"
-                      >
-                        {t.leaveRoom as string}
-                      </button>
-                    </div>
+                        socket.emit("start-game", {
+                          roomId: localGameState.roomId,
+                        });
+                      }}
+                      className={`bg-blue-500 hover:bg-blue-600 text-white text-sm font-bold py-2 px-6 rounded-lg transition-all ${
+                        !localGameState.players.player2
+                          ? "opacity-50 cursor-not-allowed"
+                          : ""
+                      }`}
+                      disabled={!localGameState.players.player2}
+                      title={
+                        localGameState.players.player2
+                          ? (t.startButtonTitle as string)
+                          : (t.noOpponent as string)
+                      }
+                    >
+                      {t.startGame as string}
+                    </button>
+
+                    <button
+                      onClick={() => setShowLeaveConfirm(true)}
+                      className="bg-red-500 hover:bg-red-600 text-white text-sm font-bold py-2 px-6 rounded-lg"
+                    >
+                      {t.leaveRoom as string}
+                    </button>
                   </div>
                 ) : (
                   /* Non-owner: show waiting message */

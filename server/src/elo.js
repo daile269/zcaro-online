@@ -31,6 +31,10 @@ export async function updateEloForMatch(
   isDraw = false
 ) {
   try {
+    // Debug: show which sockets we were asked to update so we can trace missing users
+    console.debug(
+      `[ELO] updateEloForMatch called for room=${roomId} socketA=${socketA} socketB=${socketB} winner=${winnerSocketId} isDraw=${isDraw}`
+    );
     // Find or create users by socketId
     const [userA, userB] = await Promise.all([
       User.findOneAndUpdate(
@@ -44,6 +48,14 @@ export async function updateEloForMatch(
         { upsert: true, new: true }
       ),
     ]);
+
+    // Log what we found/created so it's easy to debug missing entries
+    console.debug(
+      `[ELO] userA: id=${userA?._id} socketId=${userA?.socketId} elo=${userA?.elo}`
+    );
+    console.debug(
+      `[ELO] userB: id=${userB?._id} socketId=${userB?.socketId} elo=${userB?.elo}`
+    );
 
     const beforeA = userA.elo || 1200;
     const beforeB = userB.elo || 1200;
@@ -81,7 +93,23 @@ export async function updateEloForMatch(
       }),
     ]);
 
+    // Confirm persistence in logs (helps debug DB vs emit timing)
+    console.debug(
+      `[ELO] persisted: room=${roomId} ${socketA} ${beforeA}->${afterA}; ${socketB} ${beforeB}->${afterB}`
+    );
+
     // Save history
+    // compute result strings in a clearer way (avoid nested ternaries)
+    let resultA;
+    if (isDraw) resultA = "draw";
+    else if (scoreA === 1) resultA = "win";
+    else resultA = "loss";
+
+    let resultB;
+    if (isDraw) resultB = "draw";
+    else if (scoreB === 1) resultB = "win";
+    else resultB = "loss";
+
     await EloHistory.create([
       {
         userId: userA._id,
@@ -89,7 +117,7 @@ export async function updateEloForMatch(
         before: beforeA,
         after: afterA,
         change: afterA - beforeA,
-        result: isDraw ? "draw" : scoreA === 1 ? "win" : "loss",
+        result: resultA,
       },
       {
         userId: userB._id,
@@ -97,7 +125,7 @@ export async function updateEloForMatch(
         before: beforeB,
         after: afterB,
         change: afterB - beforeB,
-        result: isDraw ? "draw" : scoreB === 1 ? "win" : "loss",
+        result: resultB,
       },
     ]);
 
@@ -118,6 +146,19 @@ export async function updateEloForMatch(
         },
       ],
     });
+
+    // Also emit a generic 'rating-updated' event for clients that listen for
+    // the naming used by the Glicko path. This keeps both handlers working.
+    try {
+      io.to(roomId).emit("rating-updated", {
+        players: [
+          { socketId: socketA, before: beforeA, after: afterA },
+          { socketId: socketB, before: beforeB, after: afterB },
+        ],
+      });
+    } catch (e) {
+      console.error("Failed to emit rating-updated", e);
+    }
 
     return {
       socketA: { before: beforeA, after: afterA },

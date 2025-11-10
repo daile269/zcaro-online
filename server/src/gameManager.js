@@ -46,8 +46,10 @@ class GameManager {
       createdAt: Date.now(),
       winningCells: [],
       // Whether this room is rated (affects whether Elo/rating changes are applied)
-      // Default: true. If caller passes player1.rated === false, the room will be unrated.
-      rated: player1?.rated === false ? false : true,
+      // Default: false for user-created rooms. Auto-match rooms should explicitly
+      // pass `rated: true` when created. If caller passes player1.rated === true,
+      // the room will be rated.
+      rated: player1?.rated === true ? true : false,
       // Whether this room is private (created by a user for friends with a code)
       // Default: false. Set true when caller passes player1.private === true
       private: player1?.private === true ? true : false,
