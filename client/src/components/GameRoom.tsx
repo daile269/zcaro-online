@@ -588,18 +588,18 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
         <div className="grid grid-cols-3 md:grid-cols-3 gap-4 mb-4 items-center">
           {/* Left player (player1 slot) */}
           <div className="flex flex-col items-center gap-2">
-            <div className="relative w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 bg-white/80 backdrop-blur-lg rounded-full flex items-center justify-center border border-blue-200">
+            <div className="relative w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 bg-white/80 backdrop-blur-lg rounded-full flex items-center justify-center">
               {leftPlayer?.avatar ? (
                 <img
                   src={leftPlayer.avatar}
                   alt={leftPlayer.name}
-                  className={`w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-full ${
+                  className={`w-14 h-14 sm:w-16 sm:h-16 md:w-20 md:h-20 rounded-full ${
                     leftIsActive ? "slow-spin filter brightness-75" : ""
                   } z-30`}
                 />
               ) : (
                 <div
-                  className={`w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 bg-teal-500 rounded-full flex items-center justify-center text-white font-bold text-2xl ${
+                  className={`w-14 h-14 sm:w-16 sm:h-16 md:w-20 md:h-20 bg-teal-500 rounded-full flex items-center justify-center text-white font-bold text-2xl ${
                     leftIsActive ? "slow-spin filter brightness-75" : ""
                   } z-30`}
                 >
@@ -703,18 +703,18 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
 
           {/* Right player (player2 slot) */}
           <div className="flex flex-col items-center gap-2">
-            <div className="relative w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 bg-white/80 backdrop-blur-lg rounded-full flex items-center justify-center border border-blue-200">
+            <div className="relative w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 bg-white/80 backdrop-blur-lg rounded-full flex items-center justify-center">
               {rightPlayer?.avatar ? (
                 <img
                   src={rightPlayer.avatar}
                   alt={rightPlayer.name}
-                  className={`w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-full ${
+                  className={`w-14 h-14 sm:w-16 sm:h-16 md:w-20 md:h-20 rounded-full ${
                     rightIsActive ? "slow-spin" : ""
                   } z-30`}
                 />
               ) : (
                 <div
-                  className={`w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 bg-gray-300 rounded-full flex items-center justify-center text-gray-700 font-bold text-2xl ${
+                  className={`w-14 h-14 sm:w-16 sm:h-16 md:w-20 md:h-20 bg-gray-300 rounded-full flex items-center justify-center text-gray-700 font-bold text-2xl ${
                     rightIsActive ? "slow-spin" : ""
                   } z-30`}
                 >
