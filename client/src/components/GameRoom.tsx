@@ -97,10 +97,10 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
       copyTitle: "Sao chép mã phòng",
       copyButton: "📋 Sao chép",
       copied: "Đã sao chép",
-      startNew: "▶ Bắt đầu ván mới",
+      startNew: "▶ Bắt đầu",
       leaveRoom: "Rời phòng",
       cannotStart: "Không thể bắt đầu: chưa có đối thủ",
-      startGame: "▶ Bắt đầu trò chơi",
+      startGame: "▶ Bắt đầu",
       noOpponent: "Chưa có đối thủ",
       sharingTip: "💡 Chia sẻ mã phòng cho bạn bè để họ tham gia cùng bạn!",
       waitingOwnerStart: "Đang chờ chủ phòng bắt đầu trò chơi...",
@@ -899,7 +899,7 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
                           roomId: localGameState.roomId,
                         });
                       }}
-                      className={`bg-blue-500 hover:bg-blue-600 text-white text-sm font-bold py-2 px-6 rounded-lg transition-all ${
+                      className={`bg-blue-500 hover:bg-blue-600 text-white text-sm font-bold py-2 px-4 rounded-lg transition-all ${
                         !localGameState.players.player2
                           ? "opacity-50 cursor-not-allowed"
                           : ""
@@ -916,7 +916,7 @@ export default function GameRoom(props: Readonly<GameRoomProps>) {
 
                     <button
                       onClick={() => setShowLeaveConfirm(true)}
-                      className="bg-red-500 hover:bg-red-600 text-white text-sm font-bold py-2 px-6 rounded-lg"
+                      className="bg-red-500 hover:bg-red-600 text-white text-sm font-bold py-2 px-4 rounded-lg"
                     >
                       {t.leaveRoom as string}
                     </button>

@@ -253,44 +253,6 @@ function App() {
       addToast(error || "Xác thực thất bại", "error");
     });
 
-    // Rating updates: server emits rating-updated to rooms after elo/glicko changes
-    socket.on(
-      "rating-updated",
-      (payload: { players?: Array<{ socketId?: string; after?: number }> }) => {
-        try {
-          const players = Array.isArray(payload?.players) ? payload.players : [];
-          if (!players.length) return;
-          // find entry for this client's socket id
-          const myEntry = players.find(
-            (p: { socketId?: string; after?: number }) =>
-              p.socketId === (mySocketId || socket.id)
-          );
-        if (!myEntry) return;
-        // update local user if present
-        setUser((prev) => {
-          if (!prev) return prev;
-            const updatedAny: any = {
-              ...prev,
-            };
-            // persist 'elo' and 'rating' fields so UI can prefer elo then rating
-            if (typeof myEntry.after === "number") {
-              updatedAny.elo = myEntry.after;
-              updatedAny.rating = myEntry.after;
-            }
-            const updated = updatedAny as AuthUser;
-          try {
-            localStorage.setItem("zcaro_user", JSON.stringify(updated));
-          } catch {
-            /* ignore */
-          }
-          return updated;
-        });
-        addToast("Rating updated", "success");
-      } catch (e) {
-        console.error("Failed to handle rating-updated", e);
-      }
-    });
-
     // Room joined success (show a quick toast)
     socket.on("room-joined", () => {
       addToast("Vào phòng thành công", "success");
@@ -322,10 +284,9 @@ function App() {
       socket.off("room-exists");
       socket.off("identified");
       socket.off("identify-failed");
-      socket.off("rating-updated");
       socket.off("room-state");
     };
-  }, [user, mySocketId]);
+  }, [user]);
 
   // handle sign in from GoogleLogin component
   const handleSignIn = (u: AuthUser) => {

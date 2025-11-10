@@ -130,7 +130,7 @@ export default function ChatBox({
   const translations: Record<string, Record<string, unknown>> = {
     vi: {
       placeholder: "Gửi tin nhắn...",
-      sendButton: "➤ Gửi",
+      sendButton: "➤",
       playerPrefix: "Người chơi",
       anon: "Khách",
     },
